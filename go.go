@@ -1,18 +1,18 @@
 package main
 
 import (
- "fmt"
- "log"
- "os/exec"
- "os"
- "regexp"
- "bufio"
- "strings"
- "path/filepath"
- "crypto/md5"
-"encoding/hex"
-"io/ioutil"
+	"bufio"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"pgdump_splitter/dbobjects"
+	"regexp"
 )
+
+var STRUCTURE_PATH string = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structure/"
+var DUMP_PATH string = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dump.sql"
 
 func pgdump() {
 	cmd := exec.Command(
@@ -26,141 +26,11 @@ func pgdump() {
 
 	stdoutStderr, err := cmd.CombinedOutput()
 	fmt.Printf("%s\n", stdoutStderr)
-	
+
 	if err != nil {
 		log.Fatal(err)
 	}
 }
-
-
-func rgxtest() {
-
-	re := regexp.MustCompile("^-- Name: (.*); Type: (.*); Schema: (.*);")
-	txt, err := os.ReadFile("dump.sql")
-	if err != nil {
-		fmt.Println("could not read the file content")
-	}
-	fmt.Printf("%s", txt)
-	fmt.Printf("%q\n", re.FindAllSubmatch(txt, -1))
-
-}
-
-type DbObject struct {
-    schema 	string
-    name  	string
-    objtype string
-	fullpath string
-}
-
-func NormalizeAcl(dbo *DbObject) {
-	rgx := regexp.MustCompile("^([A-Z]+) (.*)$")
-	matches := rgx.FindStringSubmatch(dbo.name)
-
-	if len(matches) > 0 {
-		dbo.name = matches[2]
-
-		switch matches[1] {
-			case "SCHEMA":
-				dbo.schema = matches[2]
-				dbo.fullpath = dbo.name + "/" + dbo.name + ".sql"
-			case "FUNCTION": dbo.fullpath = dbo.schema + "/" + strings.ToLower(matches[1]) + "s/" + GenerateFunctionFileName(dbo.name) + ".sql"
-			default : dbo.fullpath = dbo.schema + "/" + strings.ToLower(matches[1]) + "s/" + dbo.name + ".sql"
-			}
-	}
-}
-
-func RedirectObject(dbo *DbObject) {
-	rgx := regexp.MustCompile("^([A-Z]+) (.*)$")
-	matches := rgx.FindStringSubmatch(dbo.name)
-
-	if len(matches) > 0 {
-		
-		dbo.name = matches[2]
-
-		switch matches[1] {
-		case "SCHEMA":
-			dbo.schema = matches[2]
-			dbo.objtype = "SCHEMA"
-		case "COLUMN":
-			dbo.objtype = "TABLE"
-		default:
-			dbo.objtype = matches[1]
-		}
-
-		NormalizeDbObject(dbo)
-
-	}
-}
-
-func GenerateFunctionFileName(funcident string) string {
-	rgx := regexp.MustCompile("^(.*)\\((.*)\\)$")
-	matches := rgx.FindStringSubmatch(funcident)
-
-	if len(matches) > 0 {
-
-		if (matches[2] != "") {
-			return matches[1] + "-" + funcArgsToHash(matches[2])[0:6] + ".sql"
-		} else {
-			return matches[1] + ".sql"
-		}
-	}
-
-	return funcident
-}
-
-
-func NormalizeSplit(dbo *DbObject, newtype string) {
-
-	rgx := regexp.MustCompile("^(.*) (.*)$")
-	matches := rgx.FindStringSubmatch(dbo.name)
-
-	if len(matches) > 0 {
-		dbo.name = matches[1]
-		dbo.objtype = newtype
-		NormalizeDbObject(dbo)
-	}
-}
-
-
-
-func NormalizeDbObject(dbo *DbObject) {
-
-	switch dbo.objtype {
-	case "SCHEMA": dbo.fullpath = dbo.name + "/" + dbo.name + ".sql"
-	case "COMMENT": RedirectObject(dbo)
-	case "ACL": RedirectObject(dbo)
-	case "FUNCTION": dbo.fullpath = dbo.schema + "/" + strings.ToLower(dbo.objtype) + "s/" + GenerateFunctionFileName(dbo.name)
-	case "FK CONSTRAINT": NormalizeSplit(dbo, "TABLE")
-	case "CONSTRAINT": NormalizeSplit(dbo, "TABLE")
-	case "TRIGGER": NormalizeSplit(dbo, "TABLE")
-	case "DEFAULT": NormalizeSplit(dbo, "TABLE")
-	case "SEQUENCE SET": 
-		dbo.objtype = "SEQUENCE"
-		NormalizeDbObject(dbo)
-	case "SEQUENCE OWNED BY": 
-		dbo.objtype = "SEQUENCE"
-		NormalizeDbObject(dbo)
-	case "PUBLICATION TABLE":
-		dbo.schema = "-"
-		NormalizeSplit(dbo, "PUBLICATION")
-	default : dbo.fullpath = dbo.schema + "/" + strings.ToLower(dbo.objtype) + "s/" + dbo.name + ".sql"
-	}
-
-}
-
-
-func CreateFile(filefullpath string) {
-
-	_, err := os.Stat(filefullpath)
-	if os.IsNotExist(err) {
-		if err := os.MkdirAll(filepath.Dir(filefullpath), 0770); err != nil {
-			log.Fatal(err)
-		}
-		os.Create(filefullpath)
-
-	}
-}
-
 
 func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
@@ -169,7 +39,7 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	for i := 0; i < len(data); i++ {
 		if data[i] == '\n' {
 			// Include the newline character in the token
-			return i + 1, data[0:i+1], nil
+			return i + 1, data[0 : i+1], nil
 		}
 	}
 	// If at end of file and no newline found, return the entire data
@@ -179,88 +49,67 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
+func ProcessDump(args Args) {
 
-func funcArgsToHash(input string) string {
-	// Calculate the MD5 hash
-	hash := md5.Sum([]byte(input))
-
-	// Convert the hash to a hexadecimal string
-	hashStr := hex.EncodeToString(hash[:])
-
-	return hashStr
-}
-
-func extractDocu (dbo *DbObject) {
-	
-	content, err := ioutil.ReadFile("structure/" + dbo.fullpath)
-	if err != nil {
-		fmt.Println("Error")
-		log.Fatal(err)
-	}
-
-	rgx := regexp.MustCompile(`(?s)DOCU(.*)DOCU`)
-	matches := rgx.FindSubmatch(content)
-	if len(matches) > 1 {
-
-
-		newfile := filepath.Dir("structure/" + dbo.fullpath) + "/" + filepath.Base("structure/" + dbo.fullpath) + ".md"
-
-		err := ioutil.WriteFile(newfile, matches[1], 0777)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-	}
-
-}
-
-func ProcessDump() {
-	// Open the file
-	file, err := os.Open("dump.sql")
+	err := os.RemoveAll(args.Dest)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
-	defer file.Close()
 
-	err = os.RemoveAll("structure/")
-    if err != nil {
-        fmt.Println("Error:", err)
-        return
-    }
+	var scanner *bufio.Scanner
 
-	rgx := regexp.MustCompile("^-- Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
+	// Open the file
+	if args.File != "" {
+		file, err := os.Open(DUMP_PATH)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		defer file.Close()
+		scanner = bufio.NewScanner(file)
+	} else {
+		cmd := exec.Command(
+			"pg_dump",
+			"-h127.0.0.1",
+			"-p50032",
+			"-Upostgres",
+			"--schema-only",
+			"betsys",
+		)
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer out.Close()
 
-	// Create a scanner to read the file line by line
-	scanner := bufio.NewScanner(file)
+		err = cmd.Start()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		scanner = bufio.NewScanner(out)
+	}
+
+	rgx := regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
+
+	// Set the scanner to preserve original line endings
 	scanner.Split(preserveNewlines)
 
-	var curObj DbObject
-	var newfile *os.File
+	var curObj dbobjects.DbObject
+
 	// Iterate over each line
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Process the line here
-		
-		
 
 		matches := rgx.FindStringSubmatch(line)
-		
 
 		if len(matches) > 0 {
 
-			if curObj.objtype == "FUNCTION" {
-				err = newfile.Sync()
-				if err != nil {
-					fmt.Println("Error:", err)
-					log.Fatal(err)
-					return
-				}
-				newfile.Close()
-				extractDocu(&curObj)
+			if curObj.Content != "" {
+				curObj.StoreObj()
 			}
-
-
 
 			// Iterate over each match
 			result := make(map[string]string)
@@ -269,50 +118,64 @@ func ProcessDump() {
 					result[name] = matches[i]
 				}
 			}
-			curObj = DbObject{
-				name : result["Name"],
-				objtype : result["Type"],
-				schema : result["Schema"],
-
+			curObj = dbobjects.DbObject{
+				Rootpath: args.Dest,
+				Name:     result["Name"],
+				ObjType:  result["Type"],
+				Schema:   result["Schema"],
 			}
 
-			NormalizeDbObject(&curObj)
-			fmt.Println(curObj.objtype + " -> " + curObj.fullpath)
-			CreateFile("structure/" + curObj.fullpath)
-			scanner.Scan()
-			scanner.Scan()
+			dbobjects.NormalizeDbObject(&curObj)
+
 			continue
 		}
 
-	//	fmt.Println(curObj.objtype + " -> " + curObj.fullpath)
-		if curObj.fullpath == "" {
-			continue
+		if curObj.ObjType != "TABLE DATA" {
+			curObj.Content = curObj.Content + line
 		}
 
-		newfile,err = os.OpenFile("structure/" + curObj.fullpath, os.O_APPEND|os.O_WRONLY, 0770)
-
-		if err != nil {
-			fmt.Println("Could not open path:" + curObj.fullpath)
-			return
-		}
-		defer newfile.Close()
-		
-		_, err2 := newfile.WriteString(line)
-
-		if err2 != nil {
-			fmt.Println("Could not write text to example.txt")
-		}
 	}
 
 	// Check for any errors that may have occurred during scanning
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error:", err)
 	}
+
+}
+
+type Args struct {
+	File string
+	Mode string
+	Host string
+	Port int
+	User string
+	DNme string
+	Dest string
 }
 
 func main() {
 
-	ProcessDump()
-     // Print the output
-	 fmt.Println("Finished")
+	var args Args
+
+	args.File = *flag.String("file", "", "path to dump generated by pg_dump")
+	args.Mode = *flag.String("mode", "custom", "Dump objects as they are organized into dump, or reorganize, agregating related objects together. Available values: custom, origin")
+	args.Host = *flag.String("host", "127.0.0.1", "address of the host, to be used for pg_dump")
+	args.Port = *flag.Int("port", 50032, "address of the host, to be used for pg_dump")
+	args.User = *flag.String("user", "postgres", "user name")
+	args.DNme = *flag.String("dbname", "betsys", "name of database")
+	args.Dest = *flag.String("destpath", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structures/", "Location where stuctures will be dumped to")
+
+	flag.Parse()
+	/*
+		if args.File == "" || args.Dest == "" || args.Host == "" {
+			fmt.Println("Mandatory arguments are missing:")
+			fmt.Println("The program must get either path to the dump file or database credentials to connect to. Also destination path is mandatory")
+			fmt.Println("Available arguments:")
+			flag.PrintDefaults()
+			return
+		}
+	*/
+	ProcessDump(args)
+	// Print the output
+	fmt.Println("Finished")
 }
