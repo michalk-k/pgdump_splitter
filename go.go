@@ -11,9 +11,6 @@ import (
 	"regexp"
 )
 
-var STRUCTURE_PATH string = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structure/"
-var DUMP_PATH string = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dump.sql"
-
 func pgdump() {
 	cmd := exec.Command(
 		"pg_dump",
@@ -61,7 +58,7 @@ func ProcessDump(args Args) {
 
 	// Open the file
 	if args.File != "" {
-		file, err := os.Open(DUMP_PATH)
+		file, err := os.Open(args.File)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
