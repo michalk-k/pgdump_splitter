@@ -1,12 +1,14 @@
 package fileutils
 
 import (
+	"log"
 	"os"
 	"path/filepath"
-	"log"
-   )
+)
 
-func CreateFile(filefullpath string) {
+// Function checks if file exists, creating it if not exists, including the whole path needed for that fie
+// The function returns true if file has been created, or false if file already had existed.
+func CreateFile(filefullpath string) bool {
 
 	_, err := os.Stat(filefullpath)
 	if os.IsNotExist(err) {
@@ -14,6 +16,8 @@ func CreateFile(filefullpath string) {
 			log.Fatal(err)
 		}
 		os.Create(filefullpath)
-
+		return true
 	}
+
+	return false
 }
