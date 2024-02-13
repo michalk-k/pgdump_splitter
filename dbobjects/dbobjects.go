@@ -52,6 +52,9 @@ func (obj DbObject) extractDocu() {
 // It also extracts documentation for function code if available
 func (obj DbObject) StoreObj() {
 
+	NormalizeDbObject(&obj)
+	GenerateDestinationPath(&obj)
+
 	if obj.FullPath == "" {
 		fmt.Println("Emtpy path")
 		fmt.Println(obj.Content)
@@ -146,6 +149,16 @@ func NormalizeSubtypes(dbo *DbObject) {
 	}
 }
 
+func NormalizeIndex(dbo *DbObject) {
+	rgx := regexp.MustCompile(" ON ([\\w]+)\\.([\\w]+)")
+	matches := rgx.FindStringSubmatch(dbo.Content)
+
+	if len(matches) > 0 {
+		dbo.ObjSubtype = "TABLE"
+		dbo.ObjSubName = matches[2]
+	}
+}
+
 // prepares object type-based part of the file path
 // In `origin` mode it leaves names untouched
 // In `custom` mode it makes names lowercase, also it ensures plural form of the name, ie TABLE -> tables, INDEX -> indexes
@@ -195,7 +208,7 @@ func GenerateDestinationPath(dbo *DbObject) {
 			if dbo.ObjSubtype == "" {
 				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
 			} else {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
+				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.ObjSubName + ".sql"
 			}
 		}
 
@@ -221,6 +234,8 @@ func NormalizeDbObject(dbo *DbObject) {
 		NormalizeSubtypes2(dbo, "TABLE")
 	case "TRIGGER":
 		NormalizeSubtypes2(dbo, "TABLE")
+	case "INDEX":
+		NormalizeIndex(dbo)
 	case "DEFAULT":
 		NormalizeSubtypes2(dbo, "TABLE")
 	case "SEQUENCE SET":
@@ -228,7 +243,9 @@ func NormalizeDbObject(dbo *DbObject) {
 	case "SEQUENCE OWNED BY":
 		NormalizeSubtypes2(dbo, "SEQUENCE")
 	case "PUBLICATION TABLE":
-		dbo.Schema = "-"
+		if dbo.IsCustom {
+			dbo.Schema = "-"
+		}
 		NormalizeSubtypes2(dbo, "PUBLICATION")
 	}
 
