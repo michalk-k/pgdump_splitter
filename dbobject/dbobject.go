@@ -1,4 +1,4 @@
-package dbobjects
+package dbobject
 
 import (
 	"crypto/md5"
@@ -92,10 +92,10 @@ func (obj *DbObject) StoreObj() {
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
 func removeArgNamesFromFunctionIdent(funcident string) string {
-	rgx := regexp.MustCompile(", (OUT )?([\\w]+)")
-	funcident = rgx.ReplaceAllLiteralString(funcident, ",")
+	rgx := regexp.MustCompile(", (OUT )?([[:word:]$]+)[ ]")
+	funcident = rgx.ReplaceAllLiteralString(funcident, ", ")
 
-	rgx = regexp.MustCompile("\\(([\\w]+ )")
+	rgx = regexp.MustCompile("\\(([[:word:]$]+ )")
 	funcident = rgx.ReplaceAllString(funcident, "(")
 
 	return funcident
