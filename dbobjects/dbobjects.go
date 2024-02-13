@@ -50,10 +50,10 @@ func (obj DbObject) extractDocu() {
 // Stores objects to the file.
 // It makes some minor formatting (mainly adds/removes EOLs)
 // It also extracts documentation for function code if available
-func (obj DbObject) StoreObj() {
+func (obj *DbObject) StoreObj() {
 
-	NormalizeDbObject(&obj)
-	GenerateDestinationPath(&obj)
+	obj.normalizeDbObject()
+	obj.generateDestinationPath()
 
 	if obj.FullPath == "" {
 		fmt.Println("Emtpy path")
@@ -91,7 +91,7 @@ func (obj DbObject) StoreObj() {
 // this funciton stripes unwanted parts our from the identifier.
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
-func RemoveArgNamesFromFunctionIdent(funcident string) string {
+func removeArgNamesFromFunctionIdent(funcident string) string {
 	rgx := regexp.MustCompile(", (OUT )?([\\w]+)")
 	funcident = rgx.ReplaceAllLiteralString(funcident, ",")
 
@@ -106,16 +106,16 @@ func RemoveArgNamesFromFunctionIdent(funcident string) string {
 // It might happen in case of higher number of function arguments
 //
 // In this implementation, the function arguments are replaced by md5 hash calculated from string representing the arguments
-func GenerateFunctionFileName(funcident string) string {
+func generateFunctionFileName(funcident string) string {
 	rgx := regexp.MustCompile("^(.*)\\((.*)\\)$")
 	matches := rgx.FindStringSubmatch(funcident)
 
 	if len(matches) > 0 {
 
 		if matches[2] != "" {
-			return matches[1] + "-" + funcArgsToHash(matches[2])[0:6] + ".sql"
+			return matches[1] + "-" + funcArgsToHash(matches[2])[0:6]
 		} else {
-			return matches[1] + ".sql"
+			return matches[1]
 		}
 	}
 
@@ -124,7 +124,7 @@ func GenerateFunctionFileName(funcident string) string {
 
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to indexes, triggers and similar objects which have no parent object type stored in object name
-func NormalizeSubtypes2(dbo *DbObject, newtype string) {
+func (dbo *DbObject) normalizeSubtypes2(newtype string) {
 
 	rgx := regexp.MustCompile("^(.*) (.*)$")
 	matches := rgx.FindStringSubmatch(dbo.Name)
@@ -138,7 +138,7 @@ func NormalizeSubtypes2(dbo *DbObject, newtype string) {
 
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to comments or ACLs
-func NormalizeSubtypes(dbo *DbObject) {
+func (dbo *DbObject) normalizeSubtypes() {
 	rgx := regexp.MustCompile("^([A-Z]+) (.*?)(\\.(.*))?$")
 	matches := rgx.FindStringSubmatch(dbo.Name)
 
@@ -149,7 +149,7 @@ func NormalizeSubtypes(dbo *DbObject) {
 	}
 }
 
-func NormalizeIndex(dbo *DbObject) {
+func (dbo *DbObject) normalizeIndex() {
 	rgx := regexp.MustCompile(" ON ([\\w]+)\\.([\\w]+)")
 	matches := rgx.FindStringSubmatch(dbo.Content)
 
@@ -162,7 +162,7 @@ func NormalizeIndex(dbo *DbObject) {
 // prepares object type-based part of the file path
 // In `origin` mode it leaves names untouched
 // In `custom` mode it makes names lowercase, also it ensures plural form of the name, ie TABLE -> tables, INDEX -> indexes
-func GenerateObjTypePath(typename string, iscustom bool) string {
+func generateObjTypePath(typename string, iscustom bool) string {
 
 	var objtpename string
 
@@ -181,28 +181,28 @@ func GenerateObjTypePath(typename string, iscustom bool) string {
 }
 
 // generate path to the file for the dumped object
-func GenerateDestinationPath(dbo *DbObject) {
+func (dbo *DbObject) generateDestinationPath() {
 
 	if dbo.ObjSubtype == "FUNCTION" {
-		dbo.ObjSubName = RemoveArgNamesFromFunctionIdent(dbo.ObjSubName)
-		dbo.ObjSubName = GenerateFunctionFileName(dbo.ObjSubName)
+		dbo.ObjSubName = removeArgNamesFromFunctionIdent(dbo.ObjSubName)
+		dbo.ObjSubName = generateFunctionFileName(dbo.ObjSubName)
 	}
 
 	if dbo.ObjType == "FUNCTION" {
-		dbo.Name = GenerateFunctionFileName(dbo.Name)
+		dbo.Name = generateFunctionFileName(dbo.Name)
 	}
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
 		dbo.FullPath = dbo.Rootpath + dbo.Name + "/" + dbo.Name + ".sql"
 	} else {
 
-		objtpename := GenerateObjTypePath(dbo.ObjType, dbo.IsCustom)
+		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
 
 		if dbo.IsCustom {
 			if dbo.ObjSubtype == "" {
 				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
 			} else {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + GenerateObjTypePath(dbo.ObjSubtype, dbo.IsCustom) + "/" + dbo.ObjSubName + ".sql"
+				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom) + "/" + dbo.ObjSubName + ".sql"
 			}
 		} else {
 			if dbo.ObjSubtype == "" {
@@ -218,35 +218,35 @@ func GenerateDestinationPath(dbo *DbObject) {
 
 // The function fixes content of the object due to the fact that pgdump stores data in non-consistent way.
 // For example it stores information about object type (in case of ACL or COMMENT) in a name attribute.
-func NormalizeDbObject(dbo *DbObject) {
+func (dbo *DbObject) normalizeDbObject() {
 
 	switch dbo.ObjType {
 	case "COMMENT":
-		NormalizeSubtypes(dbo)
+		dbo.normalizeSubtypes()
 		if dbo.ObjSubtype == "COLUMN" {
 			dbo.ObjSubtype = "TABLE"
 		}
 	case "ACL":
-		NormalizeSubtypes(dbo)
+		dbo.normalizeSubtypes()
 	case "FK CONSTRAINT":
-		NormalizeSubtypes2(dbo, "TABLE")
+		dbo.normalizeSubtypes2("TABLE")
 	case "CONSTRAINT":
-		NormalizeSubtypes2(dbo, "TABLE")
+		dbo.normalizeSubtypes2("TABLE")
 	case "TRIGGER":
-		NormalizeSubtypes2(dbo, "TABLE")
+		dbo.normalizeSubtypes2("TABLE")
 	case "INDEX":
-		NormalizeIndex(dbo)
+		dbo.normalizeIndex()
 	case "DEFAULT":
-		NormalizeSubtypes2(dbo, "TABLE")
+		dbo.normalizeSubtypes2("TABLE")
 	case "SEQUENCE SET":
-		NormalizeSubtypes2(dbo, "SEQUENCE")
+		dbo.normalizeSubtypes2("SEQUENCE")
 	case "SEQUENCE OWNED BY":
-		NormalizeSubtypes2(dbo, "SEQUENCE")
+		dbo.normalizeSubtypes2("SEQUENCE")
 	case "PUBLICATION TABLE":
 		if dbo.IsCustom {
 			dbo.Schema = "-"
 		}
-		NormalizeSubtypes2(dbo, "PUBLICATION")
+		dbo.normalizeSubtypes2("PUBLICATION")
 	}
 
 	if dbo.ObjSubtype == "SCHEMA" {
