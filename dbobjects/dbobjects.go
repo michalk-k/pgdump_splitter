@@ -37,7 +37,7 @@ func (obj DbObject) extractDocu() {
 	matches := rgx.FindSubmatch(Content)
 	if len(matches) > 1 {
 
-		newfile := filepath.Dir(obj.FullPath) + "/" + filepath.Base(obj.FullPath) + ".md"
+		newfile := filepath.Dir(obj.FullPath) + "/" + strings.TrimSuffix(filepath.Base(obj.FullPath), filepath.Ext(obj.FullPath)) + ".md"
 
 		err := os.WriteFile(newfile, matches[1], 0777)
 		if err != nil {
@@ -139,13 +139,22 @@ func (dbo *DbObject) normalizeSubtypes2(newtype string) {
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to comments or ACLs
 func (dbo *DbObject) normalizeSubtypes() {
-	rgx := regexp.MustCompile("^([A-Z]+) (.*?)(\\.(.*))?$")
+	rgx := regexp.MustCompile("^([A-Z]+) (.*)$")
 	matches := rgx.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
 		dbo.ObjSubtype = matches[1]
 		dbo.ObjSubName = matches[2]
+	}
 
+	if dbo.ObjSubtype == "COLUMN" {
+		rgx := regexp.MustCompile("^([\\S]+)\\.([\\S]+)$")
+		matches := rgx.FindStringSubmatch(dbo.ObjSubName)
+
+		if len(matches) > 0 {
+			dbo.ObjSubtype = "TABLE"
+			dbo.ObjSubName = matches[1]
+		}
 	}
 }
 
@@ -223,9 +232,6 @@ func (dbo *DbObject) normalizeDbObject() {
 	switch dbo.ObjType {
 	case "COMMENT":
 		dbo.normalizeSubtypes()
-		if dbo.ObjSubtype == "COLUMN" {
-			dbo.ObjSubtype = "TABLE"
-		}
 	case "ACL":
 		dbo.normalizeSubtypes()
 	case "FK CONSTRAINT":
