@@ -1,6 +1,7 @@
 package fileutils
 
 import (
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,4 +21,66 @@ func CreateFile(filefullpath string) bool {
 	}
 
 	return false
+}
+
+// CopyDir copies the contents of a source directory to a destination directory recursively.
+func CopyDir(src, dest string) error {
+	// Create destination directory if it doesn't exist
+	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
+		return err
+	}
+
+	// Open source directory
+	dir, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+
+	// Read the contents of the source directory
+	fileInfos, err := dir.Readdir(-1)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the files in the source directory
+	for _, fileInfo := range fileInfos {
+		srcFilePath := filepath.Join(src, fileInfo.Name())
+		destFilePath := filepath.Join(dest, fileInfo.Name())
+
+		if fileInfo.IsDir() {
+			// Recursively copy subdirectories
+			if err := CopyDir(srcFilePath, destFilePath); err != nil {
+				return err
+			}
+		} else {
+			// Copy regular files
+			if err := CopyFile(srcFilePath, destFilePath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// CopyFile copies a file from source to destination.
+func CopyFile(src, dest string) error {
+	// Open source file
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	// Create destination file
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	// Copy data from source to destination
+	_, err = io.Copy(destFile, srcFile)
+	return err
 }

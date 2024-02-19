@@ -21,7 +21,11 @@ type DbObject struct {
 	ObjSubName string
 	FullPath   string
 	Content    string
+	Database   string
 	IsCustom   bool
+	ClstInDb   bool
+	NoDbInPath bool
+	DocuRgx    string
 }
 
 // Extracts documentation (DOCU section) from the contect.
@@ -33,13 +37,13 @@ func (obj DbObject) extractDocu() {
 		log.Fatal(err)
 	}
 
-	rgx := regexp.MustCompile(`(?s)DOCU(.*)DOCU`)
+	rgx := regexp.MustCompile(`(?s)` + obj.DocuRgx)
 	matches := rgx.FindSubmatch(Content)
 	if len(matches) > 1 {
 
 		newfile := filepath.Dir(obj.FullPath) + "/" + strings.TrimSuffix(filepath.Base(obj.FullPath), filepath.Ext(obj.FullPath)) + ".md"
-
-		err := os.WriteFile(newfile, matches[1], 0777)
+		content := strings.Trim(string(matches[1]), " -\n") + "\n"
+		err := os.WriteFile(newfile, []byte(content), 0777)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -139,7 +143,7 @@ func (dbo *DbObject) normalizeSubtypes2(newtype string) {
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to comments or ACLs
 func (dbo *DbObject) normalizeSubtypes() {
-	rgx := regexp.MustCompile("^([A-Z]+) (.*)$")
+	rgx := regexp.MustCompile("^([A-Z ]+) (.*)$")
 	matches := rgx.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
@@ -201,24 +205,60 @@ func (dbo *DbObject) generateDestinationPath() {
 		dbo.Name = generateFunctionFileName(dbo.Name)
 	}
 
+	switch dbo.IsCustom {
+	case true:
+		dbo.generateDestinationPathCustom()
+	case false:
+		dbo.generateDestinationPathOrigin()
+	}
+
+}
+
+func (dbo *DbObject) generateDestinationPathOrigin() {
+
+	var dbpath string
+	if dbo.Database != "" && !dbo.NoDbInPath {
+		dbpath = dbo.Database + "/"
+	}
+
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.FullPath = dbo.Rootpath + dbo.Name + "/" + dbo.Name + ".sql"
+		dbo.FullPath = dbo.Rootpath + dbpath + dbo.Name + "/" + dbo.Name + ".sql"
+	} else if dbo.ObjType == "DATABASE" {
+		dbpath = dbo.Name
 	} else {
 
 		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
 
-		if dbo.IsCustom {
-			if dbo.ObjSubtype == "" {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
-			} else {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom) + "/" + dbo.ObjSubName + ".sql"
-			}
+		if dbo.ObjSubtype == "" {
+			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
 		} else {
-			if dbo.ObjSubtype == "" {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
-			} else {
-				dbo.FullPath = dbo.Rootpath + dbo.Schema + "/" + objtpename + "/" + dbo.ObjSubName + ".sql"
-			}
+			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.ObjSubName + ".sql"
+		}
+	}
+
+}
+
+func (dbo *DbObject) generateDestinationPathCustom() {
+
+	var dbpath string
+	if dbo.Database != "" && !dbo.NoDbInPath {
+		dbpath = dbo.Database + "/"
+	}
+
+	if dbo.ObjType == "DATABASE" {
+		dbpath = dbo.Name + "/"
+	}
+
+	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
+		dbo.FullPath = dbo.Rootpath + dbpath + dbo.Name + "/" + dbo.Name + ".sql"
+	} else {
+
+		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
+
+		if dbo.ObjSubtype == "" {
+			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
+		} else {
+			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom) + "/" + dbo.ObjSubName + ".sql"
 		}
 
 	}
@@ -228,6 +268,10 @@ func (dbo *DbObject) generateDestinationPath() {
 // The function fixes content of the object due to the fact that pgdump stores data in non-consistent way.
 // For example it stores information about object type (in case of ACL or COMMENT) in a name attribute.
 func (dbo *DbObject) normalizeDbObject() {
+
+	if !dbo.IsCustom {
+		return
+	}
 
 	switch dbo.ObjType {
 	case "COMMENT":

@@ -4,12 +4,10 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"log"
 	"os"
-	"os/exec"
 	"pgdump_splitter/dbobject"
+	fu "pgdump_splitter/fileutils"
 	"regexp"
-	"strconv"
 )
 
 // custom function for the Scanner.
@@ -31,6 +29,29 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
+func Save(dbo *dbobject.DbObject, exdb_rgx string) {
+
+	if exdb_rgx != "" {
+		rgx := regexp.MustCompile(exdb_rgx)
+		matches := rgx.FindStringSubmatch(dbo.Database)
+		if len(matches) > 0 {
+			return
+		}
+	}
+
+	if dbo.Content != "" {
+		dbo.StoreObj()
+	}
+
+}
+
+func RelocateClusterRoles(srcDir string, destDir string) {
+	if err := fu.CopyDir(srcDir, destDir); err != nil {
+		fmt.Println("Error copying directory:", err)
+		return
+	}
+}
+
 // Most outer processing function.
 // It initializes a stream either from a file or pgdump, and processes it line by line.
 func ProcessDump(args *Args) {
@@ -42,9 +63,15 @@ func ProcessDump(args *Args) {
 	}
 
 	var scanner *bufio.Scanner
+	var dbname string
+	var clusterphase = true
+	var curObj dbobject.DbObject
 
-	// Open the file
+	// Open the file or pipe
 	if args.File != "" {
+
+		fmt.Println("Loading dump data from a file: " + args.File)
+
 		file, err := os.Open(args.File)
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -53,48 +80,136 @@ func ProcessDump(args *Args) {
 		defer file.Close()
 		scanner = bufio.NewScanner(file)
 	} else {
-		cmd := exec.Command(
-			args.DCom,
-			"-h"+args.Host,
-			"-p"+strconv.Itoa(args.Port),
-			"-U"+args.User,
-			"--schema-only",
-			args.DNme,
-		)
 
-		out, err := cmd.StdoutPipe()
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer out.Close()
-
-		err = cmd.Start()
-		if err != nil {
-			log.Fatal(err)
+		fmt.Println("Loading dump data from stdin (pipe)")
+		// Check if anything is attached to stdin
+		stat, _ := os.Stdin.Stat()
+		if !((stat.Mode() & os.ModeCharDevice) == 0) {
+			fmt.Println("No data is being piped to stdin")
+			return
 		}
 
-		scanner = bufio.NewScanner(out)
+		scanner = bufio.NewScanner(os.Stdin)
 	}
 
-	rgx := regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
-
+	// Create a scanner.
 	// Set the scanner to preserve original line endings
+
 	scanner.Split(preserveNewlines)
 
-	var curObj dbobject.DbObject
-
 	// Iterate over each line
-
 	for scanner.Scan() {
+
 		line := scanner.Text()
 
+		if !clusterphase && dbname == "" {
+			//		dbname = args.DNme
+		}
+
+		// Reacts on row:
+		// \connect database_name
+		rgx := regexp.MustCompile("^\\\\connect (.*)")
 		matches := rgx.FindStringSubmatch(line)
+		if len(matches) > 0 {
+			Save(&curObj, args.ExDb)
+			curObj = dbobject.DbObject{}
+			dbname = matches[1]
+			continue
+		}
+
+		if clusterphase {
+
+			// Reacts on rows:
+			// -- User Configurations
+			// -- User Databases
+			rgx = regexp.MustCompile("^-- (User Configurations|Databases)[\\s]*$")
+			matches = rgx.FindStringSubmatch(line)
+			if len(matches) > 0 {
+
+				if matches[1] == "Databases" {
+					clusterphase = false
+				}
+
+				Save(&curObj, args.ExDb)
+				continue
+			}
+		}
+
+		// Reacts on rows:
+		// -- PostgreSQL database dump
+		// -- PostgreSQL database dump complete
+		//
+		// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
+		rgx = regexp.MustCompile("^-- PostgreSQL database dump[\\s]*(complete)?[\\s]*$")
+		matches = rgx.FindStringSubmatch(line)
+		if len(matches) > 0 {
+
+			if matches[1] == "complete" {
+				if args.MvRl {
+					RelocateClusterRoles(args.Dest+"-", args.Dest+dbname+"/-")
+				}
+			} else {
+				clusterphase = false
+			}
+
+			Save(&curObj, args.ExDb)
+			curObj = dbobject.DbObject{}
+			continue
+		}
+
+		// Reacts on rows:
+		// -- Roles
+		// -- Role memberships
+		// -- User Config "user_name"
+		// Starts collecting data for obj type ROLE
+		if clusterphase {
+			rgx = regexp.MustCompile("(^-- (?P<Type1>Roles|Role memberships)[\\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\\s]*$)")
+			matches = rgx.FindStringSubmatch(line)
+			if len(matches) > 0 {
+
+				Save(&curObj, args.ExDb)
+
+				// Iterate over each match
+				result := make(map[string]string)
+				for i, name := range rgx.SubexpNames() {
+					if i != 0 && name != "" {
+						result[name] = matches[i]
+					}
+				}
+
+				var objtype string
+				if result["Type1"] != "" {
+					objtype = result["Type1"]
+				} else if result["Type2"] != "" {
+					objtype = result["Type2"]
+				}
+
+				curObj = dbobject.DbObject{
+					Rootpath:   args.Dest,
+					Name:       objtype,
+					ObjType:    "ROLE",
+					Schema:     "-",
+					Database:   dbname,
+					IsCustom:   args.Mode == "custom",
+					NoDbInPath: args.NoDb,
+					DocuRgx:    args.Docu,
+				}
+				continue
+			}
+		}
+
+		// Reacts on rows:
+		// -- Name: some name; Type: some type; Schema: some_schema;
+		// -- Data for Name: some name; Type: some type; Schema: some_schema;
+		//
+		// Starts collecting data for obj type ROLE
+		// If type is TABLE DATA, data are not being added to the object (for performance reasons)
+		rgx = regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
+		matches = rgx.FindStringSubmatch(line)
 
 		if len(matches) > 0 {
 
-			if curObj.Content != "" {
-				curObj.StoreObj()
-			}
+			Save(&curObj, args.ExDb)
 
 			// Iterate over each match
 			result := make(map[string]string)
@@ -104,11 +219,14 @@ func ProcessDump(args *Args) {
 				}
 			}
 			curObj = dbobject.DbObject{
-				Rootpath: args.Dest,
-				Name:     result["Name"],
-				ObjType:  result["Type"],
-				Schema:   result["Schema"],
-				IsCustom: args.Mode == "custom",
+				Rootpath:   args.Dest,
+				Name:       result["Name"],
+				ObjType:    result["Type"],
+				Schema:     result["Schema"],
+				Database:   dbname,
+				IsCustom:   args.Mode == "custom",
+				NoDbInPath: args.NoDb,
+				DocuRgx:    args.Docu,
 			}
 
 			continue
@@ -120,8 +238,17 @@ func ProcessDump(args *Args) {
 
 	}
 
-	if curObj.Content != "" {
-		curObj.StoreObj()
+	// save the last row remaining in the buffer
+	Save(&curObj, args.ExDb)
+
+	// Optionally remove - subdirectory (if exists).
+	// it contains roles data created from pgdumpall
+	if args.MvRl {
+		err := os.RemoveAll(args.Dest + "/-")
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
 	}
 
 	// Check for any errors that may have occurred during scanning
@@ -134,41 +261,33 @@ func ProcessDump(args *Args) {
 // Structure handling program runtime configuration.
 // Values are comming from command line arguments.
 type Args struct {
-	File string
 	Mode string
-	Host string
-	Port int
-	User string
-	DNme string
 	Dest string
-	DCom string
+	NoDb bool
+	ExDb string
+	MvRl bool
+	File string
+	Docu string
 }
 
 func main() {
 
 	var args Args
-	var file string
-	file = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/test8.sql"
-	args.File = *flag.String("f", file, "path to dump generated by pg_dump")
-	args.DCom = *flag.String("c", "pg_dump", "The path to pg_dump command")
-	args.Mode = *flag.String("m", "custom", "The mode of dumping db objects. origin - for file organization as present in the database dump. custom - reorganizes db objects storing related ones into single file")
-	args.Host = *flag.String("h", "127.0.0.1", "Specifies the hostname of the machine on which the server is running. If the value begins with a slash, it is used as the directory for the Unix domain socket. The default is taken from the PGHOST environment variable, if set, else a Unix domain socket connection is attempted.")
-	args.Port = *flag.Int("p", 50032, "Specifies the TCP port or local Unix domain socket file extension on which the server is listening for connections. Defaults to the PGPORT environment variable, if set, or a compiled-in default")
-	args.User = *flag.String("u", "postgres", "User name to connect as.")
-	args.DNme = *flag.String("d", "clients_and_terminals", "Specifies the name of the database pg_dump connects to")
-	args.Dest = *flag.String("s", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structures/", "Location where structures will be dumped to")
+	//var file string
+	//file = "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dumpall.sql"
+
+	flag.StringVar(&args.File, "f", "", "path to dump generated by pg_dump or pg_dumpall. If omited the program will expect data on stdin via system pipe.")
+	flag.StringVar(&args.Mode, "mode", "custom", "The mode of dumping db objects. origin - for file organization as present in the database dump. custom - reorganizes db objects storing related ones into single file")
+	flag.StringVar(&args.Dest, "dst", "", "Location where structures will be dumped to")
+	flag.BoolVar(&args.NoDb, "ndb", false, "No db name in destination path. It should not be set to true if multiple databases are dumped at once")
+	flag.StringVar(&args.ExDb, "exdb", "^(template|postgres)", "Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from pg_dumpall, exclude them using pd_dumpall switch.")
+	flag.BoolVar(&args.MvRl, "mc", true, "Move dump of roles into each database subdirectory")
+	flag.StringVar(&args.Docu, "docu", "/\\*DOCU(.*)DOCU\\*/", "Move dump of roles into each database subdirectory.")
 
 	flag.Parse()
 
 	if !(args.Mode == "" || args.Mode == "custom" || args.Mode == "origin") {
-		fmt.Println("Invalid value passed to -m modifier")
-		flag.PrintDefaults()
-		return
-	}
-	if args.File == "" && args.Host == "" || args.Dest == "" {
-		fmt.Println("Mandatory arguments are missing:")
-		fmt.Println("The program must get either path to the dump file or database credentials to connect to. Also destination path is mandatory")
-		fmt.Println("Available arguments:")
+		fmt.Println("Invalid value passed to `mode` modifier")
 		flag.PrintDefaults()
 		return
 	}

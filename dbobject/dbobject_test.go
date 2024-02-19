@@ -76,3 +76,22 @@ func TestFuncionPath2(t *testing.T) {
 	}
 
 }
+
+func TestForeignDataWrapperAcl(t *testing.T) {
+
+	dbo := DbObject{
+		Rootpath: "/root/",
+		Name:     "FOREIGN DATA WRAPPER dblink_fdw",
+		ObjType:  "ACL",
+		Schema:   "-",
+		IsCustom: true,
+	}
+
+	dbo.normalizeDbObject()
+	dbo.generateDestinationPath()
+
+	want := DbObject{Rootpath: "/root/", Schema: "-", Name: "FOREIGN DATA WRAPPER dblink_fdw", ObjType: "ACL", ObjSubtype: "FOREIGN DATA WRAPPER", ObjSubName: "dblink_fdw", FullPath: "/root/-/foreign data wrappers/dblink_fdw.sql", Content: "", IsCustom: true}
+	if !reflect.DeepEqual(dbo, want) {
+		t.Errorf("test TestRootObjects() failed")
+	}
+}
