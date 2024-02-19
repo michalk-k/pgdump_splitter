@@ -1,9 +1,8 @@
 # Motivation
-The main reason why this program has been created is to create file structure representing database dump, in order to version such a database in the GIT.
+This utility is designed with a specific purpose in mind: to facilitate the creation of a file structure that mirrors a database dump, enabling efficient versioning within a GIT repository.
 
-Why not a single file? \
-The result has to be versioned (ie in GIT) and then worked on by teams. A single leads to excesive merging conflicts. The more files the structure is split into, the fewer merging conflicts. \
-Also, working with small files, and comparing their content (ie in GIT) is more comfortable than with a single big one.
+Why not simply one large file?\
+The decision to structure the data across multiple files stems from the necessity to minimize merging conflicts when collaborating across teams. By breaking down the database dump into smaller, more manageable files, the likelihood of encountering excessive merging conflicts is significantly reduced. Additionally, the granularity provided by smaller files enhances the ease of comparing and managing content within GIT, making the collaborative process smoother and more streamlined.
 
 # Features
 1. Supports SQL dumps created by `pg_dump` and `pg_dumpall`
