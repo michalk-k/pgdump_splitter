@@ -20,7 +20,7 @@ Also, working with small files, and comparing their content (ie in GIT) is more 
 
 The following command-line options control the content and format of the output.
 
-`-m`
+`-mode`
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The mode of dumping db objects. origin - files are organized as present in the database dump. custom - reorganizes db objects storing related ones into single file
      
