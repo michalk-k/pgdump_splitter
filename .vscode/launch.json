@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "go.go",
-            "args": ["-f", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dumpall.sql"],
+            "args": ["-f", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dumpall.sql", "-dst", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structure/"],
         }
     ]
 }

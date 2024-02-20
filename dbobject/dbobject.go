@@ -69,11 +69,13 @@ func (obj DbObject) extractDocu() error {
 func (obj *DbObject) StoreObj() error {
 
 	obj.normalizeDbObject()
-	obj.generateDestinationPath()
+	if err := obj.generateDestinationPath(); err != nil {
+		return err
+	}
 
 	if obj.FullPath == "" {
-		fmt.Println("Emtpy path")
-		fmt.Println(obj.Content)
+		//		fmt.Println("Emtpy path")
+		//		fmt.Println(obj.Content)
 		return nil
 	}
 
@@ -113,14 +115,18 @@ func (obj *DbObject) StoreObj() error {
 // this funciton stripes unwanted parts our from the identifier.
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
-func removeArgNamesFromFunctionIdent(funcident string) string {
-	rgx := regexp.MustCompile(", (OUT )?([[:word:]$]+)[ ]")
+func removeArgNamesFromFunctionIdent(funcident string) (string, error) {
+	rgx, err := regexp.Compile(", (OUT )?([[:word:]$]+)[ ]")
+	if err != nil {
+		return "", err
+	}
+
 	funcident = rgx.ReplaceAllLiteralString(funcident, ", ")
 
 	rgx = regexp.MustCompile("\\(([[:word:]$]+ )")
 	funcident = rgx.ReplaceAllString(funcident, "(")
 
-	return funcident
+	return funcident, nil
 }
 
 // Generate filename of the db function
@@ -128,27 +134,38 @@ func removeArgNamesFromFunctionIdent(funcident string) string {
 // It might happen in case of higher number of function arguments
 //
 // In this implementation, the function arguments are replaced by md5 hash calculated from string representing the arguments
-func generateFunctionFileName(funcident string) string {
-	rgx := regexp.MustCompile("^(.*)\\((.*)\\)$")
+func generateFunctionFileName(funcident string) (string, error) {
+
+	var ret string
+
+	rgx, err := regexp.Compile("^(.*)\\((.*)\\)$")
+	if err != nil {
+		return ret, err
+	}
+
 	matches := rgx.FindStringSubmatch(funcident)
 
 	if len(matches) > 0 {
 
 		if matches[2] != "" {
-			return matches[1] + "-" + funcArgsToHash(matches[2])[0:6]
+			ret = matches[1] + "-" + funcArgsToHash(matches[2])[0:6]
 		} else {
-			return matches[1]
+			ret = matches[1]
 		}
 	}
 
-	return funcident
+	return ret, nil
 }
 
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to indexes, triggers and similar objects which have no parent object type stored in object name
-func (dbo *DbObject) normalizeSubtypes2(newtype string) {
+func (dbo *DbObject) normalizeSubtypes2(newtype string) error {
 
-	rgx := regexp.MustCompile("^(.*) (.*)$")
+	rgx, err := regexp.Compile("^(.*) (.*)$")
+	if err != nil {
+		return err
+	}
+
 	matches := rgx.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
@@ -156,12 +173,19 @@ func (dbo *DbObject) normalizeSubtypes2(newtype string) {
 		dbo.ObjSubName = matches[1]
 		dbo.ObjSubtype = newtype
 	}
+
+	return nil
 }
 
 // Modifies meta information of object, of some of their data are stored name of the object
 // It applies to comments or ACLs
-func (dbo *DbObject) normalizeSubtypes() {
-	rgx := regexp.MustCompile("^([A-Z ]+) (.*)$")
+func (dbo *DbObject) normalizeSubtypes() error {
+
+	rgx, err := regexp.Compile("^([A-Z ]+) (.*)$")
+	if err != nil {
+		return err
+	}
+
 	matches := rgx.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
@@ -170,7 +194,11 @@ func (dbo *DbObject) normalizeSubtypes() {
 	}
 
 	if dbo.ObjSubtype == "COLUMN" {
-		rgx := regexp.MustCompile("^([\\S]+)\\.([\\S]+)$")
+		rgx, err := regexp.Compile("^([\\S]+)\\.([\\S]+)$")
+		if err != nil {
+			return err
+		}
+
 		matches := rgx.FindStringSubmatch(dbo.ObjSubName)
 
 		if len(matches) > 0 {
@@ -178,16 +206,25 @@ func (dbo *DbObject) normalizeSubtypes() {
 			dbo.ObjSubName = matches[1]
 		}
 	}
+
+	return nil
 }
 
-func (dbo *DbObject) normalizeIndex() {
-	rgx := regexp.MustCompile(" ON ([\\w]+)\\.([\\w]+)")
+func (dbo *DbObject) normalizeIndex() error {
+
+	rgx, err := regexp.Compile(" ON ([\\w]+)\\.([\\w]+)")
+	if err != nil {
+		return err
+	}
+
 	matches := rgx.FindStringSubmatch(dbo.Content)
 
 	if len(matches) > 0 {
 		dbo.ObjSubtype = "TABLE"
 		dbo.ObjSubName = matches[2]
 	}
+
+	return nil
 }
 
 // prepares object type-based part of the file path
@@ -212,15 +249,26 @@ func generateObjTypePath(typename string, iscustom bool) string {
 }
 
 // generate path to the file for the dumped object
-func (dbo *DbObject) generateDestinationPath() {
+func (dbo *DbObject) generateDestinationPath() error {
+
+	var err error
 
 	if dbo.ObjSubtype == "FUNCTION" {
-		dbo.ObjSubName = removeArgNamesFromFunctionIdent(dbo.ObjSubName)
-		dbo.ObjSubName = generateFunctionFileName(dbo.ObjSubName)
+		dbo.ObjSubName, err = removeArgNamesFromFunctionIdent(dbo.ObjSubName)
+		if err != nil {
+			return err
+		}
+		dbo.ObjSubName, err = generateFunctionFileName(dbo.ObjSubName)
+		if err != nil {
+			return err
+		}
 	}
 
 	if dbo.ObjType == "FUNCTION" {
-		dbo.Name = generateFunctionFileName(dbo.Name)
+		dbo.Name, err = generateFunctionFileName(dbo.Name)
+		if err != nil {
+			return err
+		}
 	}
 
 	switch dbo.IsCustom {
@@ -230,6 +278,7 @@ func (dbo *DbObject) generateDestinationPath() {
 		dbo.generateDestinationPathOrigin()
 	}
 
+	return nil
 }
 
 func (dbo *DbObject) generateDestinationPathOrigin() {
@@ -285,42 +334,50 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 
 // The function fixes content of the object due to the fact that pgdump stores data in non-consistent way.
 // For example it stores information about object type (in case of ACL or COMMENT) in a name attribute.
-func (dbo *DbObject) normalizeDbObject() {
+func (dbo *DbObject) normalizeDbObject() error {
+
+	var err error
 
 	if !dbo.IsCustom {
-		return
+		return nil
 	}
 
 	switch dbo.ObjType {
 	case "COMMENT":
-		dbo.normalizeSubtypes()
+		err = dbo.normalizeSubtypes()
 	case "ACL":
-		dbo.normalizeSubtypes()
+		err = dbo.normalizeSubtypes()
 	case "FK CONSTRAINT":
-		dbo.normalizeSubtypes2("TABLE")
+		err = dbo.normalizeSubtypes2("TABLE")
 	case "CONSTRAINT":
-		dbo.normalizeSubtypes2("TABLE")
+		err = dbo.normalizeSubtypes2("TABLE")
 	case "TRIGGER":
-		dbo.normalizeSubtypes2("TABLE")
+		err = dbo.normalizeSubtypes2("TABLE")
 	case "INDEX":
-		dbo.normalizeIndex()
+		err = dbo.normalizeIndex()
 	case "DEFAULT":
-		dbo.normalizeSubtypes2("TABLE")
+		err = dbo.normalizeSubtypes2("TABLE")
 	case "SEQUENCE SET":
-		dbo.normalizeSubtypes2("SEQUENCE")
+		err = dbo.normalizeSubtypes2("SEQUENCE")
 	case "SEQUENCE OWNED BY":
-		dbo.normalizeSubtypes2("SEQUENCE")
+		err = dbo.normalizeSubtypes2("SEQUENCE")
 	case "PUBLICATION TABLE":
 		if dbo.IsCustom {
 			dbo.Schema = "-"
 		}
-		dbo.normalizeSubtypes2("PUBLICATION")
+		err = dbo.normalizeSubtypes2("PUBLICATION")
+	}
+
+	if err != nil {
+		return err
 	}
 
 	if dbo.ObjSubtype == "SCHEMA" {
 		dbo.Schema = dbo.ObjSubName
 		dbo.Name = dbo.ObjSubName
 	}
+
+	return nil
 }
 
 // Generates hash replacing db function input arguments.
