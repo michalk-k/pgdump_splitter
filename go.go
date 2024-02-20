@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"pgdump_splitter/dbobject"
 	fu "pgdump_splitter/fileutils"
@@ -29,20 +30,25 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
-func Save(dbo *dbobject.DbObject, exdb_rgx string) {
+func Save(dbo *dbobject.DbObject, exdb_rgx string) error {
 
 	if exdb_rgx != "" {
-		rgx := regexp.MustCompile(exdb_rgx)
+		rgx, err := regexp.Compile(exdb_rgx)
+		if err != nil {
+			return fmt.Errorf("Invalid regular expression for excluding databases")
+		}
+
 		matches := rgx.FindStringSubmatch(dbo.Database)
 		if len(matches) > 0 {
-			return
+			return nil
 		}
 	}
 
 	if dbo.Content != "" {
-		dbo.StoreObj()
+		return dbo.StoreObj()
 	}
 
+	return nil
 }
 
 func RelocateClusterRoles(srcDir string, destDir string) {
@@ -54,12 +60,11 @@ func RelocateClusterRoles(srcDir string, destDir string) {
 
 // Most outer processing function.
 // It initializes a stream either from a file or pgdump, and processes it line by line.
-func ProcessDump(args *Args) {
+func ProcessDump(args *Args) error {
 
 	err := os.RemoveAll(args.Dest)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
 	var scanner *bufio.Scanner
@@ -74,28 +79,35 @@ func ProcessDump(args *Args) {
 
 		file, err := os.Open(args.File)
 		if err != nil {
-			fmt.Println("Error:", err)
-			return
+			return err
 		}
 		defer file.Close()
+
+		// Create a scanner.
 		scanner = bufio.NewScanner(file)
+
 	} else {
 
 		fmt.Println("Loading dump data from stdin (pipe)")
+
 		// Check if anything is attached to stdin
 		stat, _ := os.Stdin.Stat()
 		if !((stat.Mode() & os.ModeCharDevice) == 0) {
-			fmt.Println("No data is being piped to stdin")
-			return
+			return fmt.Errorf("No data is being piped to stdin")
 		}
 
+		// Create a scanner.
 		scanner = bufio.NewScanner(os.Stdin)
 	}
 
-	// Create a scanner.
 	// Set the scanner to preserve original line endings
-
 	scanner.Split(preserveNewlines)
+
+	rgx_conn := regexp.MustCompile("^\\\\connect (.*)")
+	rgx_users := regexp.MustCompile("^-- (User Configurations|Databases)[\\s]*$")
+	rgx_dbdump := regexp.MustCompile("^-- PostgreSQL database dump[\\s]*(complete)?[\\s]*$")
+	rgx_roles := regexp.MustCompile("(^-- (?P<Type1>Roles|Role memberships)[\\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\\s]*$)")
+	rgx_common := regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
 
 	// Iterate over each line
 	for scanner.Scan() {
@@ -108,10 +120,14 @@ func ProcessDump(args *Args) {
 
 		// Reacts on row:
 		// \connect database_name
-		rgx := regexp.MustCompile("^\\\\connect (.*)")
-		matches := rgx.FindStringSubmatch(line)
+		matches := rgx_conn.FindStringSubmatch(line)
 		if len(matches) > 0 {
-			Save(&curObj, args.ExDb)
+
+			err = Save(&curObj, args.ExDb)
+			if err != nil {
+				return err
+			}
+
 			curObj = dbobject.DbObject{}
 			dbname = matches[1]
 			continue
@@ -122,15 +138,18 @@ func ProcessDump(args *Args) {
 			// Reacts on rows:
 			// -- User Configurations
 			// -- User Databases
-			rgx = regexp.MustCompile("^-- (User Configurations|Databases)[\\s]*$")
-			matches = rgx.FindStringSubmatch(line)
+			matches = rgx_users.FindStringSubmatch(line)
 			if len(matches) > 0 {
 
 				if matches[1] == "Databases" {
 					clusterphase = false
 				}
 
-				Save(&curObj, args.ExDb)
+				err = Save(&curObj, args.ExDb)
+				if err != nil {
+					return err
+				}
+
 				continue
 			}
 		}
@@ -140,8 +159,7 @@ func ProcessDump(args *Args) {
 		// -- PostgreSQL database dump complete
 		//
 		// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
-		rgx = regexp.MustCompile("^-- PostgreSQL database dump[\\s]*(complete)?[\\s]*$")
-		matches = rgx.FindStringSubmatch(line)
+		matches = rgx_dbdump.FindStringSubmatch(line)
 		if len(matches) > 0 {
 
 			if matches[1] == "complete" {
@@ -152,7 +170,11 @@ func ProcessDump(args *Args) {
 				clusterphase = false
 			}
 
-			Save(&curObj, args.ExDb)
+			err = Save(&curObj, args.ExDb)
+			if err != nil {
+				return err
+			}
+
 			curObj = dbobject.DbObject{}
 			continue
 		}
@@ -163,15 +185,18 @@ func ProcessDump(args *Args) {
 		// -- User Config "user_name"
 		// Starts collecting data for obj type ROLE
 		if clusterphase {
-			rgx = regexp.MustCompile("(^-- (?P<Type1>Roles|Role memberships)[\\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\\s]*$)")
-			matches = rgx.FindStringSubmatch(line)
+
+			matches = rgx_roles.FindStringSubmatch(line)
 			if len(matches) > 0 {
 
-				Save(&curObj, args.ExDb)
+				err = Save(&curObj, args.ExDb)
+				if err != nil {
+					return err
+				}
 
 				// Iterate over each match
 				result := make(map[string]string)
-				for i, name := range rgx.SubexpNames() {
+				for i, name := range rgx_roles.SubexpNames() {
 					if i != 0 && name != "" {
 						result[name] = matches[i]
 					}
@@ -204,16 +229,18 @@ func ProcessDump(args *Args) {
 		//
 		// Starts collecting data for obj type ROLE
 		// If type is TABLE DATA, data are not being added to the object (for performance reasons)
-		rgx = regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
-		matches = rgx.FindStringSubmatch(line)
+		matches = rgx_common.FindStringSubmatch(line)
 
 		if len(matches) > 0 {
 
-			Save(&curObj, args.ExDb)
+			err = Save(&curObj, args.ExDb)
+			if err != nil {
+				return err
+			}
 
 			// Iterate over each match
 			result := make(map[string]string)
-			for i, name := range rgx.SubexpNames() {
+			for i, name := range rgx_common.SubexpNames() {
 				if i != 0 && name != "" {
 					result[name] = matches[i]
 				}
@@ -239,23 +266,26 @@ func ProcessDump(args *Args) {
 	}
 
 	// save the last row remaining in the buffer
-	Save(&curObj, args.ExDb)
+	err = Save(&curObj, args.ExDb)
+	if err != nil {
+		return err
+	}
 
 	// Optionally remove - subdirectory (if exists).
 	// it contains roles data created from pgdumpall
 	if args.MvRl {
 		err := os.RemoveAll(args.Dest + "/-")
 		if err != nil {
-			fmt.Println("Error:", err)
-			return
+			return err
 		}
 	}
 
 	// Check for any errors that may have occurred during scanning
 	if err := scanner.Err(); err != nil {
-		fmt.Println("Error:", err)
+		return err
 	}
 
+	return nil
 }
 
 // Structure handling program runtime configuration.
@@ -282,7 +312,7 @@ func main() {
 	flag.BoolVar(&args.NoDb, "ndb", false, "No db name in destination path. It should not be set to true if multiple databases are dumped at once")
 	flag.StringVar(&args.ExDb, "exdb", "^(template|postgres)", "Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from pg_dumpall, exclude them using pd_dumpall switch.")
 	flag.BoolVar(&args.MvRl, "mc", false, "Move dump of roles into each database subdirectory")
-	flag.StringVar(&args.Docu, "docu", "/\\*DOCU(.*)DOCU\\*/", "Move dump of roles into each database subdirectory.")
+	flag.StringVar(&args.Docu, "docu", `/\*DOCU(.*)DOCU\*/`, "Move dump of roles into each database subdirectory.")
 
 	flag.Parse()
 
@@ -292,7 +322,11 @@ func main() {
 		return
 	}
 
-	ProcessDump(&args)
+	err := ProcessDump(&args)
+	if err != nil {
+		log.Fatalf("Finished with error: %s", err.Error())
+	}
+
 	// Print the output
 	fmt.Println("Finished")
 }

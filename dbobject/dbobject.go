@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	fu "pgdump_splitter/fileutils"
@@ -29,15 +28,26 @@ type DbObject struct {
 }
 
 // Extracts documentation (DOCU section) from the contect.
-func (obj DbObject) extractDocu() {
+func (obj DbObject) extractDocu() error {
 
 	Content, err := os.ReadFile(obj.FullPath)
 	if err != nil {
-		fmt.Println("Error")
-		log.Fatal(err)
+		return fmt.Errorf("Error opening file: " + obj.FullPath)
 	}
 
-	rgx := regexp.MustCompile(`(?s)` + obj.DocuRgx)
+	// Defer a function that recovers from MustCompile panic
+	defer func() error {
+		if r := recover(); r != nil {
+			return fmt.Errorf("Invalid regular expression for extracting documentation")
+		}
+		return nil
+	}()
+
+	rgx, err := regexp.Compile(`(?s)` + obj.DocuRgx)
+	if err != nil {
+		return fmt.Errorf("Invalid regular expression for extracting documentation")
+	}
+
 	matches := rgx.FindSubmatch(Content)
 	if len(matches) > 1 {
 
@@ -45,16 +55,18 @@ func (obj DbObject) extractDocu() {
 		content := strings.Trim(string(matches[1]), " -\n") + "\n"
 		err := os.WriteFile(newfile, []byte(content), 0777)
 		if err != nil {
-			log.Fatal(err)
+			return fmt.Errorf("Error while writing file: %s", newfile)
 		}
 
 	}
+
+	return nil
 }
 
 // Stores objects to the file.
 // It makes some minor formatting (mainly adds/removes EOLs)
 // It also extracts documentation for function code if available
-func (obj *DbObject) StoreObj() {
+func (obj *DbObject) StoreObj() error {
 
 	obj.normalizeDbObject()
 	obj.generateDestinationPath()
@@ -62,15 +74,18 @@ func (obj *DbObject) StoreObj() {
 	if obj.FullPath == "" {
 		fmt.Println("Emtpy path")
 		fmt.Println(obj.Content)
-		return
+		return nil
 	}
 
-	newlycreated := fu.CreateFile(obj.FullPath)
+	newlycreated, err := fu.CreateFile(obj.FullPath)
+	if err != nil {
+		return fmt.Errorf("Could not create the file:" + obj.FullPath)
+	}
+
 	newfile, err := os.OpenFile(obj.FullPath, os.O_APPEND|os.O_WRONLY|os.O_APPEND, 0770)
 
 	if err != nil {
-		fmt.Println("Could not open path:" + obj.FullPath)
-		return
+		return fmt.Errorf("Could not open the file:" + obj.FullPath)
 	}
 	defer newfile.Close()
 
@@ -79,15 +94,18 @@ func (obj *DbObject) StoreObj() {
 		prefix = "\n"
 	}
 
-	_, err2 := newfile.WriteString(prefix + strings.Trim(obj.Content, " -\n") + "\n")
+	_, err = newfile.WriteString(prefix + strings.Trim(obj.Content, " -\n") + "\n")
 
-	if err2 != nil {
-		fmt.Println("Could not write text to:" + obj.FullPath)
+	if err != nil {
+		return fmt.Errorf("Could not write text to:" + obj.FullPath)
 	}
 
 	if obj.ObjType == "FUNCTION" {
-		obj.extractDocu()
+		err = obj.extractDocu()
+		return err
 	}
+
+	return nil
 
 }
 
@@ -218,11 +236,11 @@ func (dbo *DbObject) generateDestinationPathOrigin() {
 
 	var dbpath string
 	if dbo.Database != "" && !dbo.NoDbInPath {
-		dbpath = dbo.Database + "/"
+		dbpath = dbo.Database
 	}
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.FullPath = dbo.Rootpath + dbpath + dbo.Name + "/" + dbo.Name + ".sql"
+		dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Name, dbo.Name) + ".sql"
 	} else if dbo.ObjType == "DATABASE" {
 		dbpath = dbo.Name
 	} else {
@@ -230,9 +248,9 @@ func (dbo *DbObject) generateDestinationPathOrigin() {
 		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
 
 		if dbo.ObjSubtype == "" {
-			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
+			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Name) + ".sql"
 		} else {
-			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.ObjSubName + ".sql"
+			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.ObjSubName) + ".sql"
 		}
 	}
 
@@ -242,23 +260,23 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 
 	var dbpath string
 	if dbo.Database != "" && !dbo.NoDbInPath {
-		dbpath = dbo.Database + "/"
+		dbpath = dbo.Database
 	}
 
 	if dbo.ObjType == "DATABASE" {
-		dbpath = dbo.Name + "/"
+		dbpath = dbo.Name
 	}
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.FullPath = dbo.Rootpath + dbpath + dbo.Name + "/" + dbo.Name + ".sql"
+		dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Name, dbo.Name) + ".sql"
 	} else {
 
 		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
 
 		if dbo.ObjSubtype == "" {
-			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + objtpename + "/" + dbo.Name + ".sql"
+			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Name) + ".sql"
 		} else {
-			dbo.FullPath = dbo.Rootpath + dbpath + dbo.Schema + "/" + generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom) + "/" + dbo.ObjSubName + ".sql"
+			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom), dbo.ObjSubName) + ".sql"
 		}
 
 	}
