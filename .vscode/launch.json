@@ -9,8 +9,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "go.go",
-            "args": ["-f", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dumpall.sql", "-dst", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structure/"],
+            "program": "pgdump_splitter.go",
+            "args": ["-f", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/dumpall2.sql", "-dst", "/home/kozusznikm/gitrepo/pgdump_splitter_orig/structure/", "-mode", "origin"],
         }
     ]
 }

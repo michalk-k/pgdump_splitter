@@ -93,7 +93,7 @@ func ProcessDump(args *Args) error {
 		// Check if anything is attached to stdin
 		stat, _ := os.Stdin.Stat()
 		if !((stat.Mode() & os.ModeCharDevice) == 0) {
-			return fmt.Errorf("No data is being piped to stdin")
+			return fmt.Errorf("no data is being piped to stdin")
 		}
 
 		// Create a scanner.
@@ -103,20 +103,22 @@ func ProcessDump(args *Args) error {
 	// Set the scanner to preserve original line endings
 	scanner.Split(preserveNewlines)
 
-	rgx_conn := regexp.MustCompile("^\\\\connect (.*)")
-	rgx_users := regexp.MustCompile("^-- (User Configurations|Databases)[\\s]*$")
-	rgx_dbdump := regexp.MustCompile("^-- PostgreSQL database dump[\\s]*(complete)?[\\s]*$")
-	rgx_roles := regexp.MustCompile("(^-- (?P<Type1>Roles|Role memberships)[\\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\\s]*$)")
-	rgx_common := regexp.MustCompile("^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);")
+	// Dynamically resize the buffer based on input size
+	maxCapacity := args.BufS // Maximum capacity for the buffer
+	buf := make([]byte, 0, bufio.MaxScanTokenSize)
+	scanner.Buffer(buf, maxCapacity)
 
+	rgx_conn := regexp.MustCompile(`^\\connect (.*)`)
+	rgx_users := regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
+	rgx_dbdump := regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
+	rgx_roles := regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
+	rgx_common := regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
+
+	lineno := 0
 	// Iterate over each line
 	for scanner.Scan() {
-
+		lineno = lineno + 1
 		line := scanner.Text()
-
-		if !clusterphase && dbname == "" {
-			//		dbname = args.DNme
-		}
 
 		// Reacts on row:
 		// \connect database_name
@@ -129,6 +131,7 @@ func ProcessDump(args *Args) error {
 			}
 
 			curObj = dbobject.DbObject{}
+			curObj.Paths = dbobject.DbObjPath{}
 			dbname = matches[1]
 			continue
 		}
@@ -176,6 +179,7 @@ func ProcessDump(args *Args) error {
 			}
 
 			curObj = dbobject.DbObject{}
+			curObj.Paths = dbobject.DbObjPath{}
 			continue
 		}
 
@@ -210,15 +214,17 @@ func ProcessDump(args *Args) error {
 				}
 
 				curObj = dbobject.DbObject{
-					Rootpath:   args.Dest,
-					Name:       objtype,
-					ObjType:    "ROLE",
-					Schema:     "-",
-					Database:   dbname,
-					IsCustom:   args.Mode == "custom",
-					NoDbInPath: args.NoDb,
-					DocuRgx:    args.Docu,
+
+					Name:     objtype,
+					ObjType:  "ROLE",
+					Schema:   "-",
+					Database: dbname,
+					DocuRgx:  args.Docu,
 				}
+				curObj.Paths = dbobject.DbObjPath{
+					Rootpath:   args.Dest,
+					IsCustom:   args.Mode == "custom",
+					NoDbInPath: args.NoDb}
 				continue
 			}
 		}
@@ -246,15 +252,19 @@ func ProcessDump(args *Args) error {
 				}
 			}
 			curObj = dbobject.DbObject{
-				Rootpath:   args.Dest,
-				Name:       result["Name"],
-				ObjType:    result["Type"],
-				Schema:     result["Schema"],
-				Database:   dbname,
-				IsCustom:   args.Mode == "custom",
-				NoDbInPath: args.NoDb,
-				DocuRgx:    args.Docu,
+
+				Name:     result["Name"],
+				ObjType:  result["Type"],
+				Schema:   result["Schema"],
+				Database: dbname,
+
+				DocuRgx: args.Docu,
 			}
+
+			curObj.Paths = dbobject.DbObjPath{
+				Rootpath:   args.Dest,
+				IsCustom:   args.Mode == "custom",
+				NoDbInPath: args.NoDb}
 
 			continue
 		}
@@ -282,7 +292,7 @@ func ProcessDump(args *Args) error {
 
 	// Check for any errors that may have occurred during scanning
 	if err := scanner.Err(); err != nil {
-		return err
+		return fmt.Errorf("%s. Fails on line: %d", err.Error(), lineno+1)
 	}
 
 	return nil
@@ -298,6 +308,7 @@ type Args struct {
 	MvRl bool
 	File string
 	Docu string
+	BufS int
 }
 
 func main() {
@@ -312,7 +323,8 @@ func main() {
 	flag.BoolVar(&args.NoDb, "ndb", false, "No db name in destination path. It should not be set to true if multiple databases are dumped at once")
 	flag.StringVar(&args.ExDb, "exdb", "^(template|postgres)", "Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from pg_dumpall, exclude them using pd_dumpall switch.")
 	flag.BoolVar(&args.MvRl, "mc", false, "Move dump of roles into each database subdirectory")
-	flag.StringVar(&args.Docu, "docu", `/\*DOCU(.*)DOCU\*/`, "Move dump of roles into each database subdirectory.")
+	flag.StringVar(&args.Docu, "doc", `/\*DOCU(.*)DOCU\*/`, "Move dump of roles into each database subdirectory.")
+	flag.IntVar(&args.BufS, "buffer", 1024*1024, "Set up maximum buffer sizze if your dump contains data not feeting the scanner")
 
 	flag.Parse()
 
@@ -320,6 +332,10 @@ func main() {
 		fmt.Println("Invalid value passed to `mode` modifier")
 		flag.PrintDefaults()
 		return
+	}
+
+	if flag.NFlag() == 0 {
+		flag.PrintDefaults()
 	}
 
 	err := ProcessDump(&args)

@@ -60,6 +60,10 @@ The following command-line options control the `pgdump_splitter` utility:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression used to extract docuementation out of function source code into separate .md files. Default is `DOCU(.*)DOCU`
 
+`-buffer`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Set up maximum buffer sizze if your dump contains data not feeting the scanner. Default is `1048576`
+
 
 **Examples**
 

@@ -11,51 +11,74 @@ import (
 	"strings"
 )
 
+var rgx_normalize_index *regexp.Regexp
+var rgx_normalize_subtypes_a *regexp.Regexp
+var rgx_normalize_subtypes_b *regexp.Regexp
+var rgx_normalize_subtypes2 *regexp.Regexp
+var rgx_genFunctionName *regexp.Regexp
+var rgx_remArgNames_a *regexp.Regexp
+var rgx_remArgNames_b *regexp.Regexp
+
+func init() {
+
+	rgx_normalize_index = regexp.MustCompile(` ON ([\w]+)\.([\w]+)`)
+	rgx_normalize_subtypes_a = regexp.MustCompile(`^([A-Z ]+) (.*)$`)
+	rgx_normalize_subtypes_b = regexp.MustCompile(`^([\S]+)\.([\S]+)$`)
+	rgx_normalize_subtypes2 = regexp.MustCompile(`^(.*) (.*)$`)
+	rgx_genFunctionName = regexp.MustCompile(`^(FUNCTION )?(.*)\((.*)\)$`)
+	rgx_remArgNames_a = regexp.MustCompile(", (OUT )?([[:word:]$]+)[ ]")
+	rgx_remArgNames_b = regexp.MustCompile(`\(([[:word:]$]+ )`)
+}
+
+type DbObjPath struct {
+	Rootpath    string
+	NameForFile string
+	FullPath    string
+	NoDbInPath  bool
+	IsCustom    bool
+}
+
 type DbObject struct {
-	Rootpath   string
 	Schema     string
 	Name       string
 	ObjType    string
 	ObjSubtype string
 	ObjSubName string
-	FullPath   string
 	Content    string
 	Database   string
-	IsCustom   bool
-	ClstInDb   bool
-	NoDbInPath bool
 	DocuRgx    string
+	Paths      DbObjPath
 }
 
 // Extracts documentation (DOCU section) from the contect.
 func (obj DbObject) extractDocu() error {
 
-	Content, err := os.ReadFile(obj.FullPath)
+	Content, err := os.ReadFile(obj.Paths.FullPath)
 	if err != nil {
-		return fmt.Errorf("Error opening file: " + obj.FullPath)
+		return fmt.Errorf("Error opening file: " + obj.Paths.FullPath)
 	}
 
 	// Defer a function that recovers from MustCompile panic
 	defer func() error {
 		if r := recover(); r != nil {
-			return fmt.Errorf("Invalid regular expression for extracting documentation")
+			return fmt.Errorf("invalid regular expression for extracting documentation")
 		}
 		return nil
 	}()
 
 	rgx, err := regexp.Compile(`(?s)` + obj.DocuRgx)
 	if err != nil {
-		return fmt.Errorf("Invalid regular expression for extracting documentation")
+		return fmt.Errorf("invalid regular expression for extracting documentation")
 	}
 
 	matches := rgx.FindSubmatch(Content)
 	if len(matches) > 1 {
 
-		newfile := filepath.Dir(obj.FullPath) + "/" + strings.TrimSuffix(filepath.Base(obj.FullPath), filepath.Ext(obj.FullPath)) + ".md"
+		newfile := filepath.Dir(obj.Paths.FullPath) + "/" + strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath)) + ".md"
 		content := strings.Trim(string(matches[1]), " -\n") + "\n"
 		err := os.WriteFile(newfile, []byte(content), 0777)
 		if err != nil {
-			return fmt.Errorf("Error while writing file: %s", newfile)
+			return fmt.Errorf("error while writing file: %s", newfile)
 		}
 
 	}
@@ -73,21 +96,21 @@ func (obj *DbObject) StoreObj() error {
 		return err
 	}
 
-	if obj.FullPath == "" {
+	if obj.Paths.FullPath == "" {
 		//		fmt.Println("Emtpy path")
 		//		fmt.Println(obj.Content)
 		return nil
 	}
 
-	newlycreated, err := fu.CreateFile(obj.FullPath)
+	newlycreated, err := fu.CreateFile(obj.Paths.FullPath)
 	if err != nil {
-		return fmt.Errorf("Could not create the file:" + obj.FullPath)
+		return fmt.Errorf("Could not create the file:" + obj.Paths.FullPath)
 	}
 
-	newfile, err := os.OpenFile(obj.FullPath, os.O_APPEND|os.O_WRONLY|os.O_APPEND, 0770)
+	newfile, err := os.OpenFile(obj.Paths.FullPath, os.O_APPEND|os.O_WRONLY|os.O_APPEND, 0770)
 
 	if err != nil {
-		return fmt.Errorf("Could not open the file:" + obj.FullPath)
+		return fmt.Errorf("Could not open the file:" + obj.Paths.FullPath)
 	}
 	defer newfile.Close()
 
@@ -99,7 +122,7 @@ func (obj *DbObject) StoreObj() error {
 	_, err = newfile.WriteString(prefix + strings.Trim(obj.Content, " -\n") + "\n")
 
 	if err != nil {
-		return fmt.Errorf("Could not write text to:" + obj.FullPath)
+		return fmt.Errorf("Could not write text to:" + obj.Paths.FullPath)
 	}
 
 	if obj.ObjType == "FUNCTION" {
@@ -116,15 +139,10 @@ func (obj *DbObject) StoreObj() error {
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
 func removeArgNamesFromFunctionIdent(funcident string) (string, error) {
-	rgx, err := regexp.Compile(", (OUT )?([[:word:]$]+)[ ]")
-	if err != nil {
-		return "", err
-	}
 
-	funcident = rgx.ReplaceAllLiteralString(funcident, ", ")
+	funcident = rgx_remArgNames_a.ReplaceAllLiteralString(funcident, ", ")
 
-	rgx = regexp.MustCompile("\\(([[:word:]$]+ )")
-	funcident = rgx.ReplaceAllString(funcident, "(")
+	funcident = rgx_remArgNames_b.ReplaceAllString(funcident, "(")
 
 	return funcident, nil
 }
@@ -138,20 +156,17 @@ func generateFunctionFileName(funcident string) (string, error) {
 
 	var ret string
 
-	rgx, err := regexp.Compile("^(.*)\\((.*)\\)$")
-	if err != nil {
-		return ret, err
-	}
-
-	matches := rgx.FindStringSubmatch(funcident)
+	matches := rgx_genFunctionName.FindStringSubmatch(funcident)
 
 	if len(matches) > 0 {
 
-		if matches[2] != "" {
-			ret = matches[1] + "-" + funcArgsToHash(matches[2])[0:6]
+		ret = matches[1]
+		if matches[3] != "" {
+			ret = ret + matches[2] + "-" + funcArgsToHash(matches[3])[0:6]
 		} else {
-			ret = matches[1]
+			ret = ret + matches[2]
 		}
+
 	}
 
 	return ret, nil
@@ -161,12 +176,7 @@ func generateFunctionFileName(funcident string) (string, error) {
 // It applies to indexes, triggers and similar objects which have no parent object type stored in object name
 func (dbo *DbObject) normalizeSubtypes2(newtype string) error {
 
-	rgx, err := regexp.Compile("^(.*) (.*)$")
-	if err != nil {
-		return err
-	}
-
-	matches := rgx.FindStringSubmatch(dbo.Name)
+	matches := rgx_normalize_subtypes2.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
 		dbo.Name = matches[2]
@@ -181,12 +191,7 @@ func (dbo *DbObject) normalizeSubtypes2(newtype string) error {
 // It applies to comments or ACLs
 func (dbo *DbObject) normalizeSubtypes() error {
 
-	rgx, err := regexp.Compile("^([A-Z ]+) (.*)$")
-	if err != nil {
-		return err
-	}
-
-	matches := rgx.FindStringSubmatch(dbo.Name)
+	matches := rgx_normalize_subtypes_a.FindStringSubmatch(dbo.Name)
 
 	if len(matches) > 0 {
 		dbo.ObjSubtype = matches[1]
@@ -194,12 +199,8 @@ func (dbo *DbObject) normalizeSubtypes() error {
 	}
 
 	if dbo.ObjSubtype == "COLUMN" {
-		rgx, err := regexp.Compile("^([\\S]+)\\.([\\S]+)$")
-		if err != nil {
-			return err
-		}
 
-		matches := rgx.FindStringSubmatch(dbo.ObjSubName)
+		matches := rgx_normalize_subtypes_b.FindStringSubmatch(dbo.ObjSubName)
 
 		if len(matches) > 0 {
 			dbo.ObjSubtype = "TABLE"
@@ -212,12 +213,7 @@ func (dbo *DbObject) normalizeSubtypes() error {
 
 func (dbo *DbObject) normalizeIndex() error {
 
-	rgx, err := regexp.Compile(" ON ([\\w]+)\\.([\\w]+)")
-	if err != nil {
-		return err
-	}
-
-	matches := rgx.FindStringSubmatch(dbo.Content)
+	matches := rgx_normalize_index.FindStringSubmatch(dbo.Content)
 
 	if len(matches) > 0 {
 		dbo.ObjSubtype = "TABLE"
@@ -252,26 +248,36 @@ func generateObjTypePath(typename string, iscustom bool) string {
 func (dbo *DbObject) generateDestinationPath() error {
 
 	var err error
+	var name string
 
-	if dbo.ObjSubtype == "FUNCTION" {
-		dbo.ObjSubName, err = removeArgNamesFromFunctionIdent(dbo.ObjSubName)
+	if !dbo.Paths.IsCustom {
+		name = dbo.Name
+	} else if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
+		name = dbo.Name
+	} else if dbo.ObjType == "DATABASE" {
+		name = dbo.Name
+	} else if dbo.ObjSubtype != "" {
+		name = dbo.ObjSubName
+	} else {
+		name = dbo.Name
+	}
+
+	if dbo.ObjSubtype == "FUNCTION" || dbo.ObjType == "FUNCTION" {
+
+		name, err = removeArgNamesFromFunctionIdent(name)
 		if err != nil {
 			return err
 		}
-		dbo.ObjSubName, err = generateFunctionFileName(dbo.ObjSubName)
+
+		name, err = generateFunctionFileName(name)
 		if err != nil {
 			return err
 		}
 	}
 
-	if dbo.ObjType == "FUNCTION" {
-		dbo.Name, err = generateFunctionFileName(dbo.Name)
-		if err != nil {
-			return err
-		}
-	}
+	dbo.Paths.NameForFile = name
 
-	switch dbo.IsCustom {
+	switch dbo.Paths.IsCustom {
 	case true:
 		dbo.generateDestinationPathCustom()
 	case false:
@@ -284,23 +290,18 @@ func (dbo *DbObject) generateDestinationPath() error {
 func (dbo *DbObject) generateDestinationPathOrigin() {
 
 	var dbpath string
-	if dbo.Database != "" && !dbo.NoDbInPath {
+	if dbo.Database != "" && !dbo.Paths.NoDbInPath {
 		dbpath = dbo.Database
 	}
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Name, dbo.Name) + ".sql"
+		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + ".sql"
 	} else if dbo.ObjType == "DATABASE" {
 		dbpath = dbo.Name
 	} else {
 
-		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
-
-		if dbo.ObjSubtype == "" {
-			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Name) + ".sql"
-		} else {
-			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.ObjSubName) + ".sql"
-		}
+		objtpename := generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom)
+		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Paths.NameForFile) + ".sql"
 	}
 
 }
@@ -308,7 +309,7 @@ func (dbo *DbObject) generateDestinationPathOrigin() {
 func (dbo *DbObject) generateDestinationPathCustom() {
 
 	var dbpath string
-	if dbo.Database != "" && !dbo.NoDbInPath {
+	if dbo.Database != "" && !dbo.Paths.NoDbInPath {
 		dbpath = dbo.Database
 	}
 
@@ -317,15 +318,15 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 	}
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Name, dbo.Name) + ".sql"
+		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + ".sql"
 	} else {
 
-		objtpename := generateObjTypePath(dbo.ObjType, dbo.IsCustom)
+		objtpename := generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom)
 
 		if dbo.ObjSubtype == "" {
-			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Name) + ".sql"
+			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Paths.NameForFile) + ".sql"
 		} else {
-			dbo.FullPath = filepath.Join(dbo.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjSubtype, dbo.IsCustom), dbo.ObjSubName) + ".sql"
+			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjSubtype, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + ".sql"
 		}
 
 	}
@@ -337,11 +338,11 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 func (dbo *DbObject) normalizeDbObject() error {
 
 	var err error
-
-	if !dbo.IsCustom {
-		return nil
-	}
-
+	/*
+		if !dbo.Paths.IsCustom {
+			return nil
+		}
+	*/
 	switch dbo.ObjType {
 	case "COMMENT":
 		err = dbo.normalizeSubtypes()
@@ -362,7 +363,7 @@ func (dbo *DbObject) normalizeDbObject() error {
 	case "SEQUENCE OWNED BY":
 		err = dbo.normalizeSubtypes2("SEQUENCE")
 	case "PUBLICATION TABLE":
-		if dbo.IsCustom {
+		if dbo.Paths.IsCustom {
 			dbo.Schema = "-"
 		}
 		err = dbo.normalizeSubtypes2("PUBLICATION")
