@@ -53,7 +53,7 @@ The following command-line options control the `pgdump_splitter` utility:
 
 `-exdb`
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from `pg_dumpall`, exclude them using `pd_dumpall` switch
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from `pg_dumpall`, request exclusion from `pd_dumpall`. Default is `^(template|postgres)`
 
 `-mc`
 

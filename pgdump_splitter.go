@@ -315,6 +315,16 @@ type Args struct {
 	BufS int
 }
 
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
+
 func main() {
 
 	var args Args
@@ -331,7 +341,7 @@ func main() {
 
 	flag.Parse()
 
-	if flag.Lookup("version") != nil {
+	if isFlagPassed("version") {
 		fmt.Printf("pgdump_splitter %s\n", version)
 		return
 	}
