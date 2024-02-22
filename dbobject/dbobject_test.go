@@ -66,7 +66,7 @@ func TestFuncionPath1_custom(t *testing.T) {
 	dbo.generateDestinationPath()
 
 	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)", Content: "",
-		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "avals-c66339", FullPath: "/root/public/functions/avals-c66339.sql", IsCustom: true},
+		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "avals-c66339", FullPath: "/root/public/function/avals-c66339.sql", IsCustom: true},
 	}
 
 	if !reflect.DeepEqual(dbo, want) {
@@ -121,7 +121,7 @@ func TestFuncionPath2(t *testing.T) {
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
 			NameForFile: "column_names-a09c34",
-			FullPath:    "/root/public/functions/column_names-a09c34.sql",
+			FullPath:    "/root/public/function/column_names-a09c34.sql",
 			IsCustom:    true,
 		},
 	}
@@ -192,7 +192,7 @@ func TestForeignDataWrapperAcl(t *testing.T) {
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
 			NameForFile: "dblink_fdw",
-			FullPath:    "/root/-/foreign data wrappers/dblink_fdw.sql",
+			FullPath:    "/root/-/foreign data wrapper/dblink_fdw.sql",
 			IsCustom:    true,
 		},
 	}

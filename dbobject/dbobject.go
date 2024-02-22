@@ -225,23 +225,14 @@ func (dbo *DbObject) normalizeIndex() error {
 
 // prepares object type-based part of the file path
 // In `origin` mode it leaves names untouched
-// In `custom` mode it makes names lowercase, also it ensures plural form of the name, ie TABLE -> tables, INDEX -> indexes
+// In `custom` mode it makes names lowercase
 func generateObjTypePath(typename string, iscustom bool) string {
 
-	var objtpename string
-
 	if iscustom {
-		objtpename = strings.ToLower(typename)
-		if objtpename == "index" {
-			objtpename = "indexes"
-		} else {
-			objtpename = objtpename + "s"
-		}
+		return strings.ToLower(typename)
 	} else {
-		objtpename = typename
+		return typename
 	}
-
-	return objtpename
 }
 
 // generate path to the file for the dumped object
