@@ -276,8 +276,7 @@ func (dbo *DbObject) generateDestinationPathOrigin() {
 
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
 		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + ".sql"
-	} else if dbo.ObjType == "DATABASE" {
-		dbpath = dbo.Name
+
 	} else {
 
 		objtpename := generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom)
@@ -342,6 +341,9 @@ func (dbo *DbObject) normalizeDbObject() error {
 		err = dbo.normalizeSubtypes2("SEQUENCE")
 	case "SEQUENCE OWNED BY":
 		err = dbo.normalizeSubtypes2("SEQUENCE")
+	case "DATABASE PROPERTIES":
+		dbo.ObjSubtype = "DATABASE"
+		dbo.ObjSubName = dbo.Name
 	case "PUBLICATION TABLE":
 		if dbo.Paths.IsCustom {
 			dbo.Schema = "-"
