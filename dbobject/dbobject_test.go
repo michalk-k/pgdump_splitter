@@ -9,42 +9,31 @@ func TestRemoveArgumentsFromFunction(t *testing.T) {
 
 	want := ""
 	got := ""
-	var err error
 
 	want = "avals(public.hstore)"
-	got, err = removeArgNamesFromFunctionIdent("avals(public.hstore)")
+	got = removeArgNamesFromFunctionIdent("avals(public.hstore)")
 
-	if err != nil {
-		t.Errorf("error %s", err.Error())
-	}
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
 	want = "column_names(text, text, text[], text[])"
-	got, err = removeArgNamesFromFunctionIdent("column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])")
+	got = removeArgNamesFromFunctionIdent("column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])")
 
-	if err != nil {
-		t.Errorf("error %s", err.Error())
-	}
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
 	want = "connectby(text, text, text, text, integer)"
-	got, err = removeArgNamesFromFunctionIdent("connectby(text, text, text, text, integer)")
-	if err != nil {
-		t.Errorf("error %s", err.Error())
-	}
+	got = removeArgNamesFromFunctionIdent("connectby(text, text, text, text, integer)")
+
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
 	want = "pg_stat_statements(boolean, oid, oid, boolean, bigint))"
-	got, err = removeArgNamesFromFunctionIdent("pg_stat_statements(showtext boolean, OUT userid oid, OUT dbid oid, OUT toplevel boolean, OUT queryid bigint))")
-	if err != nil {
-		t.Errorf("error %s", err.Error())
-	}
+	got = removeArgNamesFromFunctionIdent("pg_stat_statements(showtext boolean, OUT userid oid, OUT dbid oid, OUT toplevel boolean, OUT queryid bigint))")
+
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}

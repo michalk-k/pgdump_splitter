@@ -102,8 +102,6 @@ func getScannerFromFile(filename string) (*bufio.Scanner, func(), error) {
 
 func getScannerFromPipe() (*bufio.Scanner, error) {
 
-	var err error
-
 	// Check if anything is attached to stdin
 	stat, err := os.Stdin.Stat()
 	if err != nil {

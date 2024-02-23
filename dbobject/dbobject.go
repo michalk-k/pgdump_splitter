@@ -92,9 +92,7 @@ func (obj DbObject) extractDocu() error {
 func (obj *DbObject) StoreObj() error {
 
 	obj.normalizeDbObject()
-	if err := obj.generateDestinationPath(); err != nil {
-		return err
-	}
+	obj.generateDestinationPath()
 
 	if obj.Paths.FullPath == "" {
 		//		fmt.Println("Emtpy path")
@@ -138,13 +136,13 @@ func (obj *DbObject) StoreObj() error {
 // this funciton stripes unwanted parts our from the identifier.
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
-func removeArgNamesFromFunctionIdent(funcident string) (string, error) {
+func removeArgNamesFromFunctionIdent(funcident string) string {
 
 	funcident = rgx_remArgNames_a.ReplaceAllLiteralString(funcident, ", ")
 
 	funcident = rgx_remArgNames_b.ReplaceAllString(funcident, "(")
 
-	return funcident, nil
+	return funcident
 }
 
 // Generate filename of the db function
@@ -152,24 +150,23 @@ func removeArgNamesFromFunctionIdent(funcident string) (string, error) {
 // It might happen in case of higher number of function arguments
 //
 // In this implementation, the function arguments are replaced by md5 hash calculated from string representing the arguments
-func generateFunctionFileName(funcident string) (string, error) {
+func generateFunctionFileName(funcident string) string {
 
-	var ret string
+	parts := rgx_genFunctionName.FindStringSubmatch(funcident)
 
-	matches := rgx_genFunctionName.FindStringSubmatch(funcident)
-
-	if len(matches) > 0 {
-
-		ret = matches[1]
-		if matches[3] != "" {
-			ret = ret + matches[2] + "-" + funcArgsToHash(matches[3])[0:6]
-		} else {
-			ret = ret + matches[2]
-		}
-
+	if len(parts) == 0 {
+		return ""
 	}
 
-	return ret, nil
+	if parts[3] != "" {
+		return parts[1] + parts[2] + "-" + funcArgsToHash(parts[3])[0:6]
+	}
+
+	if len(parts) > 0 {
+		return parts[1] + parts[2]
+	}
+
+	return ""
 }
 
 // Modifies meta information of object, of some of their data are stored name of the object
@@ -236,9 +233,8 @@ func generateObjTypePath(typename string, iscustom bool) string {
 }
 
 // generate path to the file for the dumped object
-func (dbo *DbObject) generateDestinationPath() error {
+func (dbo *DbObject) generateDestinationPath() {
 
-	var err error
 	var name string
 
 	if !dbo.Paths.IsCustom {
@@ -255,15 +251,9 @@ func (dbo *DbObject) generateDestinationPath() error {
 
 	if dbo.ObjSubtype == "FUNCTION" || dbo.ObjType == "FUNCTION" {
 
-		name, err = removeArgNamesFromFunctionIdent(name)
-		if err != nil {
-			return err
-		}
+		name = removeArgNamesFromFunctionIdent(name)
 
-		name, err = generateFunctionFileName(name)
-		if err != nil {
-			return err
-		}
+		name = generateFunctionFileName(name)
 	}
 
 	dbo.Paths.NameForFile = name
@@ -275,7 +265,6 @@ func (dbo *DbObject) generateDestinationPath() error {
 		dbo.generateDestinationPathOrigin()
 	}
 
-	return nil
 }
 
 func (dbo *DbObject) generateDestinationPathOrigin() {
