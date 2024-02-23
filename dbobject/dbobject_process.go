@@ -8,46 +8,65 @@ import (
 	"regexp"
 )
 
-// Most outer processing function.
-// It initializes a stream either from a file or pgdump, and processes it line by line.
-func ProcessDump(args *Config) error {
+// Prepare input streams into scanner and pass it to for processing
+func StartProcessing(args *Config) error {
 
-	err := os.RemoveAll(args.Dest)
+	var err error
+	var scanner *bufio.Scanner
+	var finalizeFunc func()
+
+	fmt.Println("Destination location: " + args.Dest)
+	if err = os.RemoveAll(args.Dest); err != nil {
+		return err
+	}
+
+	scanner, finalizeFunc, err = GetScannerWithData(args)
+	defer finalizeFunc()
+
 	if err != nil {
 		return err
 	}
 
+	if err = ProcessStream(args, scanner); err != nil {
+		return err
+	}
+
+	// Optionally remove - subdirectory (if exists).
+	// it contains roles data created from pgdumpall
+	if args.MvRl {
+		if err = os.RemoveAll(args.Dest + "/-"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+}
+
+// Creates scanner object
+// The scanner takes data from the stdin pipe or from the input file
+// depending on passed arguments
+func GetScannerWithData(args *Config) (*bufio.Scanner, func(), error) {
 	var scanner *bufio.Scanner
-	var dbname string
-	var clusterphase = true
-	var curObj DbObject
+	var err error
+	var closeStreamFn func()
 
 	// Open the file or pipe
 	if args.File != "" {
 
 		fmt.Println("Loading dump data from a file: " + args.File)
-
-		file, err := os.Open(args.File)
+		scanner, closeStreamFn, err = getScannerFromFile(args.File)
 		if err != nil {
-			return err
+			return nil, closeStreamFn, err
 		}
-		defer file.Close()
-
-		// Create a scanner.
-		scanner = bufio.NewScanner(file)
 
 	} else {
 
 		fmt.Println("Loading dump data from stdin (pipe)")
-
-		// Check if anything is attached to stdin
-		stat, _ := os.Stdin.Stat()
-		if !((stat.Mode() & os.ModeCharDevice) == 0) {
-			return fmt.Errorf("no data is being piped to stdin")
+		if scanner, err = getScannerFromPipe(); err != nil {
+			return nil, closeStreamFn, err
 		}
 
-		// Create a scanner.
-		scanner = bufio.NewScanner(os.Stdin)
 	}
 
 	// Set the scanner to preserve original line endings
@@ -58,6 +77,52 @@ func ProcessDump(args *Config) error {
 	buf := make([]byte, 0, bufio.MaxScanTokenSize)
 	scanner.Buffer(buf, maxCapacity)
 
+	return scanner, closeStreamFn, nil
+}
+
+func getScannerFromFile(filename string) (*bufio.Scanner, func(), error) {
+
+	var file *os.File
+	var err error
+	var closeFileFn = func() {
+		if file != nil {
+			defer file.Close()
+		}
+	}
+
+	if file, err = os.Open(filename); err != nil {
+		return nil, closeFileFn, err
+	}
+
+	// Create a scanner.
+	scanner := bufio.NewScanner(file)
+
+	return scanner, closeFileFn, nil
+}
+
+func getScannerFromPipe() (*bufio.Scanner, error) {
+
+	var err error
+
+	// Check if anything is attached to stdin
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if !((stat.Mode() & os.ModeCharDevice) == 0) {
+		return nil, fmt.Errorf("no data piped to stdin")
+	}
+
+	// Create a scanner.
+	return bufio.NewScanner(os.Stdin), nil
+
+}
+
+// Most outer processing function.
+// It initializes a stream either from a file or pgdump, and processes it line by line.
+func ProcessStream(args *Config, scanner *bufio.Scanner) error {
+
 	rgx_conn := regexp.MustCompile(`^\\connect (.*)`)
 	rgx_users := regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump := regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
@@ -65,6 +130,12 @@ func ProcessDump(args *Config) error {
 	rgx_common := regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
 
 	lineno := 0
+
+	var dbname string
+	var clusterphase = true
+	var curObj DbObject
+	var err error
+
 	// Iterate over each line
 	for scanner.Scan() {
 		lineno = lineno + 1
@@ -230,15 +301,6 @@ func ProcessDump(args *Config) error {
 	err = Save(&curObj, args.ExDb)
 	if err != nil {
 		return err
-	}
-
-	// Optionally remove - subdirectory (if exists).
-	// it contains roles data created from pgdumpall
-	if args.MvRl {
-		err := os.RemoveAll(args.Dest + "/-")
-		if err != nil {
-			return err
-		}
 	}
 
 	// Check for any errors that may have occurred during scanning

@@ -41,7 +41,7 @@ func main() {
 		return
 	}
 
-	err := dbobject.ProcessDump(&args)
+	err := dbobject.StartProcessing(&args)
 	if err != nil {
 		log.Fatalf("Finished with error: %s", err.Error())
 	}
