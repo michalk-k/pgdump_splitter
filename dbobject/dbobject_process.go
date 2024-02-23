@@ -63,7 +63,7 @@ func StartProcessing(args *Config) error {
 func GetScannerWithData(args *Config) (*bufio.Scanner, func(), error) {
 	var scanner *bufio.Scanner
 	var err error
-	var closeStreamFn func()
+	var closeStreamFn = func() {}
 
 	// Open the file or pipe
 	if args.File != "" {

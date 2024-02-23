@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["-f", "/home/kozusznikm/!tmp/dump.sql", "-dst", "/home/kozusznikm/!tmp/structure/", "-mode", "origin"],
+            "args": ["-f", "/home/kozusznikm/!tmp/dump.sql", "-dst", "/home/kozusznikm/!tmp/structure/", "-mode", "custom"],
         }
     ]
 }
