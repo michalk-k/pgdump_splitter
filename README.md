@@ -14,6 +14,22 @@ The decision to structure the data across multiple files stems from the necessit
 7. Files containing functions have filenames shortened to avoid exceeding the maximum file length allowed by the filesystem/os
 8. Extracts documentation found in functions code
 
+## Modes
+The utility provides two modes of reflecting dump stems on filesystem objects (files).
+### origin
+In this mode, the resulting structure of files and their names exactly reflects what is found in dump files created by pg_dump or pg_dumpall. For instance:
+* every index, constraint, trigger, and acls are stored in separate files
+* comment and acl file names are prefixed by the object they belong to. For example `...schema_name/ACL/TABLE tablename.sql` or `...schema_name/COMMENT/COUMN tablename.columnname.sql`
+### custom
+The custom mode is an attempt to aggregate related objects in single files.
+* indexes, constraints, triggers, and comments of the table and their columns are appended to the table sql
+* ACLs of all objects are appended to their respective object files
+* settings of databases are appended to their respective database ddl files
+* tables being published are appended to respective publication ddl files
+* inheritance of roles, as well as their settings, are appended to roles ddl
+
+  On top of that subdirectories organizing object types are converter to lowercase
+
 # Limitations
 The program scans dump files line by line executing regular expression matching against them to extract blocks of code. For this reason, using text patterns listed below in a source code of any function may confuse the utility.
 
