@@ -26,22 +26,18 @@ func init() {
 func StartProcessing(args *Config) error {
 
 	var err error
-	var scanner *bufio.Scanner
-	var finalizeFunc func()
+	var dataprov ScanerProvider
 
 	fmt.Println("Destination location: " + args.Dest)
 	if err = os.RemoveAll(args.Dest); err != nil {
 		return err
 	}
 
-	scanner, finalizeFunc, err = GetScannerWithData(args)
-	defer finalizeFunc()
-
-	if err != nil {
+	if err := dataprov.CreateScanner(args); err != nil {
 		return err
 	}
 
-	if err = ProcessStream(args, scanner); err != nil {
+	if err = ProcessStream(args, dataprov.scanner); err != nil {
 		return err
 	}
 
@@ -57,95 +53,24 @@ func StartProcessing(args *Config) error {
 
 }
 
-// Creates scanner object
-// The scanner takes data from the stdin pipe or from the input file
-// depending on passed arguments
-func GetScannerWithData(args *Config) (*bufio.Scanner, func(), error) {
-	var scanner *bufio.Scanner
-	var err error
-	var closeStreamFn = func() {}
-
-	// Open the file or pipe
-	if args.File != "" {
-
-		fmt.Println("Loading dump data from a file: " + args.File)
-		scanner, closeStreamFn, err = getScannerFromFile(args.File)
-		if err != nil {
-			return nil, closeStreamFn, err
-		}
-
-	} else {
-
-		fmt.Println("Loading dump data from stdin (pipe)")
-		if scanner, err = getScannerFromPipe(); err != nil {
-			return nil, closeStreamFn, err
-		}
-
-	}
-
-	// Set the scanner to preserve original line endings
-	scanner.Split(preserveNewlines)
-
-	// Dynamically resize the buffer based on input size
-	maxCapacity := args.BufS // Maximum capacity for the buffer
-	buf := make([]byte, 0, bufio.MaxScanTokenSize)
-	scanner.Buffer(buf, maxCapacity)
-
-	return scanner, closeStreamFn, nil
-}
-
-func getScannerFromFile(filename string) (*bufio.Scanner, func(), error) {
-
-	var file *os.File
-	var err error
-	var closeFileFn = func() {
-		if file != nil {
-			defer file.Close()
-		}
-	}
-
-	if file, err = os.Open(filename); err != nil {
-		return nil, closeFileFn, err
-	}
-
-	// Create a scanner.
-	scanner := bufio.NewScanner(file)
-
-	return scanner, closeFileFn, nil
-}
-
-func getScannerFromPipe() (*bufio.Scanner, error) {
-
-	// Check if anything is attached to stdin
-	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	if !((stat.Mode() & os.ModeCharDevice) == 0) {
-		return nil, fmt.Errorf("no data piped to stdin")
-	}
-
-	// Create a scanner.
-	return bufio.NewScanner(os.Stdin), nil
-
-}
-
 // Most outer processing function.
 // It initializes a stream either from a file or pgdump, and processes it line by line.
 func ProcessStream(args *Config, scanner *bufio.Scanner) error {
-
-	// rgx_conn := regexp.MustCompile(`^\\connect (.*)`)
-	// rgx_users := regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
-	// rgx_dbdump := regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
-	// rgx_roles := regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
-	// rgx_common := regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
 
 	lineno := 0
 
 	var dbname string
 	var clusterphase = true
 	var curObj DbObject
+	var rgxExclDb *regexp.Regexp
+	var err error
+
+	if args.ExDb != "" {
+		rgxExclDb, err = regexp.Compile(args.ExDb)
+		if err != nil {
+			return fmt.Errorf("invalid regular expression for excluding databases")
+		}
+	}
 
 	// Iterate over each line
 	for scanner.Scan() {
@@ -156,12 +81,12 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// \connect database_name
 		if db := InitDatabaseFromLine(line); db != "" {
 
-			if err := Save(&curObj, args.ExDb); err != nil {
+			if err := Save(&curObj, rgxExclDb); err != nil {
 				return err
 			}
 
 			// init of the obj
-			curObj = DbObject{Paths: DbObjPath{}}
+			curObj.init()
 
 			dbname = db
 			continue
@@ -190,12 +115,11 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 			}
 
 			if retmode > 0 {
-				if err := Save(&curObj, args.ExDb); err != nil {
+				if err := Save(&curObj, rgxExclDb); err != nil {
 					return err
 				}
 
-				// init of the obj
-				curObj = DbObject{Paths: DbObjPath{}}
+				curObj.init()
 
 				continue
 			}
@@ -208,7 +132,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 			if obj := InitRoleObjFromLine(line, *args, dbname); obj != nil {
 
-				if err := Save(&curObj, args.ExDb); err != nil {
+				if err := Save(&curObj, rgxExclDb); err != nil {
 					return err
 				}
 
@@ -225,7 +149,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// If type is TABLE DATA, data are not being added to the object (for performance reasons)
 		obj := InitCommonObjFromLine(line, *args, dbname)
 		if obj != nil {
-			if err := Save(&curObj, args.ExDb); err != nil {
+			if err := Save(&curObj, rgxExclDb); err != nil {
 				return err
 			}
 
@@ -240,7 +164,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 	}
 
 	// save the last row remaining in the buffer
-	if err := Save(&curObj, args.ExDb); err != nil {
+	if err := Save(&curObj, rgxExclDb); err != nil {
 		return err
 	}
 
@@ -394,15 +318,10 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
-func Save(dbo *DbObject, exdb_rgx string) error {
+func Save(dbo *DbObject, exdb_rgx *regexp.Regexp) error {
 
-	if exdb_rgx != "" {
-		rgx, err := regexp.Compile(exdb_rgx)
-		if err != nil {
-			return fmt.Errorf("invalid regular expression for excluding databases")
-		}
-
-		matches := rgx.FindStringSubmatch(dbo.Database)
+	if exdb_rgx != nil {
+		matches := exdb_rgx.FindStringSubmatch(dbo.Database)
 		if len(matches) > 0 {
 			return nil
 		}

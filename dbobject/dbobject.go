@@ -50,6 +50,10 @@ type DbObject struct {
 	Paths      DbObjPath
 }
 
+func (obj *DbObject) init() {
+	obj = &DbObject{Paths: DbObjPath{}}
+}
+
 // Extracts documentation (DOCU section) from the contect.
 func (obj DbObject) extractDocu() error {
 
