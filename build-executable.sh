@@ -12,7 +12,7 @@ for platform in "${platforms[@]}"; do
         output_name+='.exe'
     fi
 
-    env CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-s -w" -o $output_name
+    env CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -buildvcs=false -ldflags "-s -w" -o $output_name
     if [ $? -ne 0 ]; then
         echo 'An error has occurred! Aborting the script execution...'
         exit 1
