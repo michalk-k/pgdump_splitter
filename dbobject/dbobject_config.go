@@ -7,6 +7,7 @@ type Config struct {
 	Dest string
 	NoDb bool
 	ExDb string
+	WlDb string
 	MvRl bool
 	File string
 	Docu string

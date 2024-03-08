@@ -51,7 +51,7 @@ type DbObject struct {
 }
 
 func (obj *DbObject) init() {
-	obj = &DbObject{Paths: DbObjPath{}}
+	*obj = DbObject{Paths: DbObjPath{}}
 }
 
 // Extracts documentation (DOCU section) from the contect.
