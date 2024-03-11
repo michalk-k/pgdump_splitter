@@ -7,7 +7,7 @@ import (
 	"pgdump_splitter/dbobject"
 )
 
-var version = "0.10.0" // may be forced by the build flag
+var version = "0.0.0" // provided by build flag (VERSION file)
 
 func main() {
 
