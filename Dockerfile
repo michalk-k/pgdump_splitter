@@ -9,7 +9,6 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 
 FROM base AS build-client
 
-ARG APP_VERSION="v0.0.0"
 ARG TARGETOS
 ARG TARGETARCH
 
