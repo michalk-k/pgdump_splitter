@@ -67,9 +67,13 @@ The following command-line options control the `pgdump_splitter` utility:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No db name in destination path. Setting it to true for dump containing multiple databases is meaningless.
 
-`-exdb`
+`-blacklist-db`
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from `pg_dumpall`, request exclusion from `pd_dumpall`. Default is `^(template|postgres)`
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression pattern allowing to skip extraction of matching databases. Useful in case of processing dump files. Ignored if `-whitelist-db` is used. In case of using a pipe from `pg_dumpall`, request exclusion from `pd_dumpall`. Default is `^(template|postgres)`
+
+`-whitelist-db`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression pattern allowing to whitelist databases. If set, only databases matching this expression are processed. Thus blacklist is not applicable.
 
 `-mc`
 
@@ -77,7 +81,7 @@ The following command-line options control the `pgdump_splitter` utility:
 
 `-doc`
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression used to extract docuementation out of function source code into separate .md files. Default is `DOCU(.*)DOCU`
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Regular expression used to extract documentation out of function source code into separate .md files. Default is `DOCU(.*)DOCU`
 
 `-buffer`
 

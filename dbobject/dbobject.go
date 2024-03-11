@@ -51,7 +51,7 @@ type DbObject struct {
 }
 
 func (obj *DbObject) init() {
-	obj = &DbObject{Paths: DbObjPath{}}
+	*obj = DbObject{Paths: DbObjPath{}}
 }
 
 // Extracts documentation (DOCU section) from the contect.
@@ -300,14 +300,16 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 		dbpath = dbo.Name
 	}
 
+	if dbo.ObjType == "DEFAULT ACL" {
+		dbo.Paths.NameForFile = strings.ToLower(strings.Replace(dbo.Paths.NameForFile, "DEFAULT PRIVILEGES FOR ", "", -1))
+	}
+
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
 		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + ".sql"
 	} else {
 
-		objtpename := generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom)
-
 		if dbo.ObjSubtype == "" {
-			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, objtpename, dbo.Paths.NameForFile) + ".sql"
+			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + ".sql"
 		} else {
 			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjSubtype, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + ".sql"
 		}

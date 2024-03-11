@@ -13,6 +13,10 @@ var rgx_users *regexp.Regexp
 var rgx_dbdump *regexp.Regexp
 var rgx_roles *regexp.Regexp
 var rgx_common *regexp.Regexp
+var rgx_ExclDb *regexp.Regexp
+var rgx_WhiteListDb *regexp.Regexp
+
+var allow_current_db bool = false
 
 func init() {
 	rgx_conn = regexp.MustCompile(`^\\connect (.*)`)
@@ -53,6 +57,41 @@ func StartProcessing(args *Config) error {
 
 }
 
+func enableCurrentDb(dbname string) bool {
+
+	if rgx_WhiteListDb != nil {
+		matches := rgx_WhiteListDb.FindStringSubmatch(dbname)
+		if len(matches) > 0 {
+			return true
+		} else {
+			return false
+		}
+	}
+
+	if rgx_ExclDb != nil {
+		matches := rgx_ExclDb.FindStringSubmatch(dbname)
+		if len(matches) > 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func allowObject(dbo *DbObject) bool {
+
+	if dbo.ObjType == "DATABASE" {
+		return enableCurrentDb(dbo.Name)
+	}
+
+	if dbo.Database != "" && dbo.Database != "-" {
+		return enableCurrentDb(dbo.Database)
+	}
+
+	return true
+
+}
+
 // Most outer processing function.
 // It initializes a stream either from a file or pgdump, and processes it line by line.
 func ProcessStream(args *Config, scanner *bufio.Scanner) error {
@@ -62,13 +101,20 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 	var dbname string
 	var clusterphase = true
 	var curObj DbObject
-	var rgxExclDb *regexp.Regexp
 	var err error
+	var processdb bool = true
 
 	if args.ExDb != "" {
-		rgxExclDb, err = regexp.Compile(args.ExDb)
+		rgx_ExclDb, err = regexp.Compile(args.ExDb)
 		if err != nil {
-			return fmt.Errorf("invalid regular expression for excluding databases")
+			return fmt.Errorf("invalid regular expression for databases exclusion")
+		}
+	}
+
+	if args.WlDb != "" {
+		rgx_WhiteListDb, err = regexp.Compile(args.WlDb)
+		if err != nil {
+			return fmt.Errorf("invalid regular expression for databases whitelisting")
 		}
 	}
 
@@ -81,48 +127,22 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// \connect database_name
 		if db := InitDatabaseFromLine(line); db != "" {
 
-			if err := Save(&curObj, rgxExclDb); err != nil {
+			dbname = db
+
+			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 				return err
 			}
 
 			// init of the obj
 			curObj.init()
 
-			dbname = db
+			if !clusterphase {
+				processdb = enableCurrentDb(dbname)
+			}
 			continue
 		}
 
 		if clusterphase {
-			// Reacts on rows:
-			// -- User Configurations
-			// -- User Databases
-			// -- PostgreSQL database dump
-			// -- PostgreSQL database dump complete
-			//
-			// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
-			//
-			// POSSIBLY NO REINIT OBJECT IN EndOfCluster for rgx_users
-			//
-
-			retmode, err := EndOfCluster(line, *args, dbname)
-
-			if err != nil {
-				return err
-			}
-
-			if retmode == 2 {
-				clusterphase = false
-			}
-
-			if retmode > 0 {
-				if err := Save(&curObj, rgxExclDb); err != nil {
-					return err
-				}
-
-				curObj.init()
-
-				continue
-			}
 
 			// Reacts on rows:
 			// -- Roles
@@ -132,13 +152,49 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 			if obj := InitRoleObjFromLine(line, *args, dbname); obj != nil {
 
-				if err := Save(&curObj, rgxExclDb); err != nil {
+				if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 					return err
 				}
 
 				curObj = *obj
 				continue
 			}
+		}
+
+		// Reacts on rows:
+		// -- User Configurations
+		// -- User Databases
+		// -- PostgreSQL database dump
+		// -- PostgreSQL database dump complete
+		//
+		// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
+		//
+		// POSSIBLY NO REINIT OBJECT IN EndOfCluster for rgx_users
+		//
+
+		retmode, err := EndOfCluster(line, *args, dbname)
+
+		if err != nil {
+			return err
+		}
+
+		if retmode == 2 {
+			clusterphase = false
+		}
+
+		if retmode > 0 {
+
+			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+				return err
+			}
+
+			curObj.init()
+
+			continue
+		}
+
+		if !clusterphase && !processdb {
+			continue
 		}
 
 		// Reacts on rows:
@@ -149,7 +205,8 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// If type is TABLE DATA, data are not being added to the object (for performance reasons)
 		obj := InitCommonObjFromLine(line, *args, dbname)
 		if obj != nil {
-			if err := Save(&curObj, rgxExclDb); err != nil {
+
+			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 				return err
 			}
 
@@ -164,7 +221,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 	}
 
 	// save the last row remaining in the buffer
-	if err := Save(&curObj, rgxExclDb); err != nil {
+	if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 		return err
 	}
 
@@ -195,7 +252,7 @@ func EndOfCluster(line string, args Config, dbname string) (int, error) {
 
 		if matches[1] == "complete" {
 
-			if args.MvRl {
+			if args.MvRl && enableCurrentDb(dbname) {
 				if err := RelocateClusterRoles(args.Dest+"-", args.Dest+dbname+"/-"); err != nil {
 					return 0, err
 				}
@@ -318,13 +375,10 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
-func Save(dbo *DbObject, exdb_rgx *regexp.Regexp) error {
+func Save(dbo *DbObject, exdb_rgx *regexp.Regexp, wldb_rgx *regexp.Regexp) error {
 
-	if exdb_rgx != nil {
-		matches := exdb_rgx.FindStringSubmatch(dbo.Database)
-		if len(matches) > 0 {
-			return nil
-		}
+	if !allowObject(dbo) {
+		return nil
 	}
 
 	if dbo.Content != "" {
