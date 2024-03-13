@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"pgdump_splitter/dbobject"
+	"pgdump_splitter/output"
 )
 
 var version = "0.0.0" // provided by build flag (VERSION file)
@@ -22,9 +24,13 @@ func main() {
 	flag.BoolVar(&args.MvRl, "mc", false, "Move dump of roles into each database subdirectory")
 	flag.StringVar(&args.Docu, "doc", `/\*DOCU(.*)DOCU\*/`, "Move dump of roles into each database subdirectory.")
 	flag.IntVar(&args.BufS, "buffer", 1024*1024, "Set up maximum buffer sizze if your dump contains data not feeting the scanner")
+	flag.BoolVar(&args.Cln, "clean", false, "If true, it will wipe out the content of the destination directory. Otherwise will attempt to add new files")
+	flag.BoolVar(&args.Quiet, "quiet", false, "If true, no information is outputed to std out")
 	flag.Bool("version", false, "Show program version")
 
 	flag.Parse()
+
+	output.Verbosity = args.Quiet
 
 	if isFlagPassed("version") {
 		fmt.Printf("pgdump_splitter %s\n", version)
@@ -37,8 +43,10 @@ func main() {
 	}
 
 	if !(args.Mode == "" || args.Mode == "custom" || args.Mode == "origin") {
-		fmt.Println("Invalid value passed to `mode` modifier")
-		flag.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "Invalid value passed to `mode` modifier")
+		if !args.Quiet {
+			flag.PrintDefaults()
+		}
 		return
 	}
 
@@ -48,7 +56,8 @@ func main() {
 	}
 
 	// Print the output
-	fmt.Println("Finished")
+	output.Println("Finished")
+
 }
 
 func isFlagPassed(name string) bool {

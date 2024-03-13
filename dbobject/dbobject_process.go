@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	fu "pgdump_splitter/fileutils"
+	"pgdump_splitter/output"
 	"regexp"
 )
 
@@ -32,9 +34,12 @@ func StartProcessing(args *Config) error {
 	var err error
 	var dataprov ScanerProvider
 
-	fmt.Println("Destination location: " + args.Dest)
-	if err = os.RemoveAll(args.Dest); err != nil {
-		return err
+	output.Println("Destination location: " + args.Dest)
+
+	if args.Cln {
+		if err = os.RemoveAll(args.Dest); err != nil {
+			return err
+		}
 	}
 
 	if err := dataprov.CreateScanner(args); err != nil {
@@ -48,7 +53,7 @@ func StartProcessing(args *Config) error {
 	// Optionally remove - subdirectory (if exists).
 	// it contains roles data created from pgdumpall
 	if args.MvRl {
-		if err = os.RemoveAll(args.Dest + "/-"); err != nil {
+		if err = os.RemoveAll(filepath.Join(args.Dest, "-")); err != nil {
 			return err
 		}
 	}
@@ -253,7 +258,7 @@ func EndOfCluster(line string, args Config, dbname string) (int, error) {
 		if matches[1] == "complete" {
 
 			if args.MvRl && enableCurrentDb(dbname) {
-				if err := RelocateClusterRoles(args.Dest+"-", args.Dest+dbname+"/-"); err != nil {
+				if err := RelocateClusterRoles(filepath.Join(args.Dest, "-"), filepath.Join(args.Dest, dbname, "-")); err != nil {
 					return 0, err
 				}
 			}

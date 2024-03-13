@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"pgdump_splitter/output"
 )
 
 type ScanerProvider struct {
@@ -26,14 +27,14 @@ func (obj *ScanerProvider) CreateScanner(args *Config) error {
 	// Open the file or pipe
 	if args.File != "" {
 
-		fmt.Println("Loading dump data from a file: " + args.File)
+		output.Println("Loading dump data from a file: " + args.File)
 		if err = obj.getScannerFromFile(args.File); err != nil {
 			return err
 		}
 
 	} else {
 
-		fmt.Println("Loading dump data from stdin (pipe)")
+		output.Println("Loading dump data from stdin (pipe)")
 		if err = obj.getScannerFromPipe(); err != nil {
 			return err
 		}

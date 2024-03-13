@@ -63,6 +63,10 @@ The following command-line options control the `pgdump_splitter` utility:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Location where structures will be dumped to.
 
+`-clean`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Remove any content from destination directory. Default is false/0/no
+
 `-ndb`
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No db name in destination path. Setting it to true for dump containing multiple databases is meaningless.
@@ -86,6 +90,10 @@ The following command-line options control the `pgdump_splitter` utility:
 `-buffer`
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Set up maximum buffer size if your dump contains data not fitting the scanner. Default is `1048576`
+
+`-quiet`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Suppress all messages printed to standard output. Errors are still printed to err output. Default is false/0/no
 
 `-version`
 
