@@ -95,6 +95,10 @@ The following command-line options control the `pgdump_splitter` utility:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Suppress all messages printed to standard output. Errors are still printed to err output. Default is false/0/no
 
+`-aclfiles`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Applicable or mode=custom only. Makes GRANTs to be outputed to separate files suffixed with .acl.sql, ie `table_name.acl.sql`. Otherwise acls are appended to related object file.
+
 `-version`
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Print the pgdump_spritter version and exit.

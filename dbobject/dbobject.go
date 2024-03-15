@@ -47,11 +47,12 @@ type DbObject struct {
 	Content    string
 	Database   string
 	DocuRgx    string
+	AclFiles   bool
 	Paths      DbObjPath
 }
 
-func (obj *DbObject) init() {
-	*obj = DbObject{Paths: DbObjPath{}}
+func (obj *DbObject) init(aclfiles bool) {
+	*obj = DbObject{Paths: DbObjPath{}, AclFiles: aclfiles}
 }
 
 // Extracts documentation (DOCU section) from the contect.
@@ -292,6 +293,14 @@ func (dbo *DbObject) generateDestinationPathOrigin() {
 func (dbo *DbObject) generateDestinationPathCustom() {
 
 	var dbpath string
+	var suffix = ".sql"
+	var path_objtype = dbo.ObjType
+	var path_objsubtype = dbo.ObjSubtype
+
+	if dbo.AclFiles && dbo.ObjType == "ACL" {
+		suffix = ".acl.sql" + suffix
+	}
+
 	if dbo.Database != "" && !dbo.Paths.NoDbInPath {
 		dbpath = dbo.Database
 	}
@@ -304,14 +313,20 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 		dbo.Paths.NameForFile = strings.ToLower(strings.Replace(dbo.Paths.NameForFile, "DEFAULT PRIVILEGES FOR ", "", -1))
 	}
 
+	if dbo.ObjType == "SEQUENCE OWNED BY" {
+
+		dbo.Paths.NameForFile = dbo.Name
+		path_objtype = "SEQUENCE"
+	}
+
 	if dbo.ObjType == "SCHEMA" || dbo.ObjSubtype == "SCHEMA" {
-		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + ".sql"
+		dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Paths.NameForFile, dbo.Paths.NameForFile) + suffix
 	} else {
 
 		if dbo.ObjSubtype == "" {
-			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjType, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + ".sql"
+			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(path_objtype, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + suffix
 		} else {
-			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(dbo.ObjSubtype, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + ".sql"
+			dbo.Paths.FullPath = filepath.Join(dbo.Paths.Rootpath, dbpath, dbo.Schema, generateObjTypePath(path_objsubtype, dbo.Paths.IsCustom), dbo.Paths.NameForFile) + suffix
 		}
 
 	}

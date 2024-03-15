@@ -35,6 +35,7 @@ func StartProcessing(args *Config) error {
 	var dataprov ScanerProvider
 
 	output.Println("Destination location: " + args.Dest)
+	output.Println(fmt.Sprintf("Clean destination location: %t", args.Cln))
 
 	if args.Cln {
 		if err = os.RemoveAll(args.Dest); err != nil {
@@ -139,7 +140,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 			}
 
 			// init of the obj
-			curObj.init()
+			curObj.init(args.AclFiles)
 
 			if !clusterphase {
 				processdb = enableCurrentDb(dbname)
@@ -193,7 +194,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 				return err
 			}
 
-			curObj.init()
+			curObj.init(args.AclFiles)
 
 			continue
 		}
@@ -315,6 +316,7 @@ func InitRoleObjFromLine(line string, args Config, dbname string) *DbObject {
 		Schema:   "-",
 		Database: dbname,
 		DocuRgx:  args.Docu,
+		AclFiles: args.AclFiles,
 		Paths: DbObjPath{
 			Rootpath:   args.Dest,
 			IsCustom:   args.Mode == "custom",
@@ -350,6 +352,7 @@ func InitCommonObjFromLine(line string, args Config, dbname string) *DbObject {
 		Schema:   result["Schema"],
 		Database: dbname,
 		DocuRgx:  args.Docu,
+		AclFiles: args.AclFiles,
 		Paths: DbObjPath{
 			Rootpath:   args.Dest,
 			IsCustom:   args.Mode == "custom",

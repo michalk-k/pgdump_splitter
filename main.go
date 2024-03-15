@@ -26,11 +26,12 @@ func main() {
 	flag.IntVar(&args.BufS, "buffer", 1024*1024, "Set up maximum buffer sizze if your dump contains data not feeting the scanner")
 	flag.BoolVar(&args.Cln, "clean", false, "If true, it will wipe out the content of the destination directory. Otherwise will attempt to add new files")
 	flag.BoolVar(&args.Quiet, "quiet", false, "If true, no information is outputed to std out")
+	flag.BoolVar(&args.AclFiles, "aclfiles", false, "Applicable or mode=custom only. Makes GRANTs to be outputed to separate files suffixed with .acl.sql, ie table_name.acl.sql. Otherwise acls are appended to related object file.")
 	flag.Bool("version", false, "Show program version")
 
 	flag.Parse()
 
-	output.Verbosity = args.Quiet
+	output.Quiet = args.Quiet
 
 	if isFlagPassed("version") {
 		fmt.Printf("pgdump_splitter %s\n", version)

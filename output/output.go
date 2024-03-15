@@ -2,10 +2,10 @@ package output
 
 import "fmt"
 
-var Verbosity bool
+var Quiet bool
 
 func Println(a ...any) (n int, err error) {
-	if !Verbosity {
+	if Quiet {
 		return -1, nil
 	}
 
