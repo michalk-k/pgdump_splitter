@@ -189,3 +189,30 @@ func TestForeignDataWrapperAcl(t *testing.T) {
 		t.Errorf("test TestRootObjects() failed")
 	}
 }
+
+func TestDatabaseAclPath(t *testing.T) {
+
+	dbo := DbObject{
+
+		Schema:     "-",
+		Name:       "DATABASE betsys",
+		ObjType:    "ACL",
+		ObjSubtype: "DATABASE",
+		ObjSubName: "betsys",
+		Database:   "betsys",
+		AclFiles:   true,
+		Paths: DbObjPath{
+			Rootpath: "/root/",
+			IsCustom: true,
+		},
+	}
+
+	dbo.normalizeDbObject()
+	dbo.generateDestinationPath()
+
+	want := "/root/betsys/-/database/betsys.acl.sql"
+
+	if want != dbo.Paths.FullPath {
+		t.Errorf("test TestDatabaseAclPath() failed")
+	}
+}

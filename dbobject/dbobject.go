@@ -298,7 +298,7 @@ func (dbo *DbObject) generateDestinationPathCustom() {
 	var path_objsubtype = dbo.ObjSubtype
 
 	if dbo.AclFiles && dbo.ObjType == "ACL" {
-		suffix = ".acl.sql" + suffix
+		suffix = ".acl" + suffix
 	}
 
 	if dbo.Database != "" && !dbo.Paths.NoDbInPath {

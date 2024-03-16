@@ -38,7 +38,7 @@ func StartProcessing(args *Config) error {
 	output.Println(fmt.Sprintf("Clean destination location: %t", args.Cln))
 
 	if args.Cln {
-		if err = os.RemoveAll(args.Dest); err != nil {
+		if err = fu.WipeDir(args.Dest); err != nil {
 			return err
 		}
 	}

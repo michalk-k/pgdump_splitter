@@ -83,3 +83,42 @@ func CopyFile(src, dest string) error {
 	_, err = io.Copy(destFile, srcFile)
 	return err
 }
+
+// Removes all files and directories from given location.
+// The most parent directory (given in path) remains untouched
+func WipeDir(dir string) error {
+
+	// Open the directory
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	// Read the directory contents
+	files, err := d.Readdir(-1)
+	if err != nil {
+		return err
+	}
+
+	// Remove each file or directory in the directory
+	for _, file := range files {
+
+		fullPath := filepath.Join(dir, file.Name())
+
+		if file.IsDir() {
+			// Remove the subdirectory incl its content
+			if err := os.RemoveAll(fullPath); err != nil {
+				return err
+			}
+
+		} else {
+			// Remove the file
+			if err := os.Remove(fullPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
