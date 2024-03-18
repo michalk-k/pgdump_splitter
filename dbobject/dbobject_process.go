@@ -21,11 +21,11 @@ var rgx_WhiteListDb *regexp.Regexp
 var allow_current_db bool = false
 
 func init() {
-	rgx_conn = regexp.MustCompile(`^\\connect (.*)`)
+	rgx_conn = regexp.MustCompile(`^\\connect( -reuse-previous=on)? (("dbname='(.*?)'")|(.*))`)
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump = regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
 	rgx_roles = regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
-	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
+	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: "?(?P<Name>.*)"?; Type: (?P<Type>.*); Schema: "?(?P<Schema>.*)"?;`)
 }
 
 // Prepare input streams into scanner and pass it to for processing
@@ -244,7 +244,11 @@ func InitDatabaseFromLine(line string) string {
 	matches := rgx_conn.FindStringSubmatch(line)
 
 	if len(matches) > 0 {
-		return matches[1]
+		if matches[4] != "" {
+			return matches[4]
+		} else {
+			return matches[2]
+		}
 	}
 
 	return ""
