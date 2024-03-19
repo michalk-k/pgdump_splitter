@@ -36,6 +36,10 @@ func StartProcessing(args *Config) error {
 	output.Println("Destination location: " + args.Dest)
 	output.Println(fmt.Sprintf("Clean destination location: %t", args.Cln))
 
+	if err := IsDocuRegexOk(args.Docu); err != nil {
+		return err
+	}
+
 	if args.Cln {
 		if err = fu.WipeDir(args.Dest); err != nil {
 			return err

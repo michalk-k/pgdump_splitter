@@ -59,8 +59,27 @@ func (obj *DbObject) appendContent(line *string) {
 	obj.Content.WriteString(*line)
 }
 
+// Check wether regular expression (given by a user) is compilable
+func IsDocuRegexOk(rgx string) error {
+
+	if rgx == "" {
+		return nil
+	}
+
+	if _, err := regexp.Compile(`(?s)` + rgx); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 // Extracts documentation (DOCU section) from the contect.
-func (obj DbObject) extractDocu() error {
+func (obj *DbObject) extractDocu() error {
+
+	if !(obj.ObjType == "FUNCTION" && obj.DocuRgx != "") {
+		return nil
+	}
 
 	Content, err := os.ReadFile(obj.Paths.FullPath)
 	if err != nil {
@@ -83,10 +102,13 @@ func (obj DbObject) extractDocu() error {
 	matches := rgx.FindSubmatch(Content)
 	if len(matches) > 1 {
 
-		newfile := filepath.Dir(obj.Paths.FullPath) + "/" + strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath)) + ".md"
+		newfile := filepath.Join(
+			filepath.Dir(obj.Paths.FullPath),
+			strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath))+".md")
+
 		content := strings.Trim(string(matches[1]), " -\n") + "\n"
-		err := os.WriteFile(newfile, []byte(content), 0777)
-		if err != nil {
+
+		if err := os.WriteFile(newfile, []byte(content), 0777); err != nil {
 			return fmt.Errorf("error while writing file: %s", newfile)
 		}
 
@@ -133,8 +155,7 @@ func (obj *DbObject) StoreObj() error {
 		return fmt.Errorf("Could not write text to:" + obj.Paths.FullPath)
 	}
 
-	if obj.ObjType == "FUNCTION" {
-		err = obj.extractDocu()
+	if err = obj.extractDocu(); err != nil {
 		return err
 	}
 
