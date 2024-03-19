@@ -2,6 +2,7 @@ package dbobject
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -54,7 +55,7 @@ func TestFuncionPath1_custom(t *testing.T) {
 	dbo.normalizeDbObject()
 	dbo.generateDestinationPath()
 
-	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)", Content: "",
+	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
 		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "avals-c66339", FullPath: "/root/public/function/avals-c66339.sql", IsCustom: true},
 	}
 
@@ -78,7 +79,7 @@ func TestFuncionPath1_orig(t *testing.T) {
 	dbo.normalizeDbObject()
 	dbo.generateDestinationPath()
 
-	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)", Content: "",
+	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
 		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "FUNCTION avals-c66339", FullPath: "/root/public/ACL/FUNCTION avals-c66339.sql", IsCustom: false},
 	}
 
@@ -106,7 +107,7 @@ func TestFuncionPath2(t *testing.T) {
 		ObjType:    "ACL",
 		ObjSubtype: "FUNCTION",
 		ObjSubName: "column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
-		Content:    "",
+		Content:    strings.Builder{},
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
 			NameForFile: "column_names-a09c34",
@@ -139,7 +140,6 @@ func TestFuncionPath2_orig(t *testing.T) {
 		ObjType:    "ACL",
 		ObjSubtype: "FUNCTION",
 		ObjSubName: "column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
-		Content:    "",
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
 			NameForFile: "FUNCTION column_names-a09c34",
@@ -177,7 +177,6 @@ func TestForeignDataWrapperAcl(t *testing.T) {
 		ObjType:    "ACL",
 		ObjSubtype: "FOREIGN DATA WRAPPER",
 		ObjSubName: "dblink_fdw",
-		Content:    "",
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
 			NameForFile: "dblink_fdw",

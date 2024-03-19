@@ -44,7 +44,7 @@ type DbObject struct {
 	ObjType    string
 	ObjSubtype string
 	ObjSubName string
-	Content    string
+	Content    strings.Builder
 	Database   string
 	DocuRgx    string
 	AclFiles   bool
@@ -53,6 +53,10 @@ type DbObject struct {
 
 func (obj *DbObject) init(aclfiles bool) {
 	*obj = DbObject{Paths: DbObjPath{}, AclFiles: aclfiles}
+}
+
+func (obj *DbObject) appendContent(line *string) {
+	obj.Content.WriteString(*line)
 }
 
 // Extracts documentation (DOCU section) from the contect.
@@ -122,7 +126,8 @@ func (obj *DbObject) StoreObj() error {
 		prefix = "\n"
 	}
 
-	_, err = newfile.WriteString(prefix + strings.Trim(obj.Content, " -\n") + "\n")
+	content := obj.Content.String()
+	_, err = newfile.WriteString(prefix + strings.Trim(content, " -\n") + "\n")
 
 	if err != nil {
 		return fmt.Errorf("Could not write text to:" + obj.Paths.FullPath)
@@ -215,7 +220,7 @@ func (dbo *DbObject) normalizeSubtypes() error {
 
 func (dbo *DbObject) normalizeIndex() error {
 
-	matches := rgx_normalize_index.FindStringSubmatch(dbo.Content)
+	matches := rgx_normalize_index.FindStringSubmatch(dbo.Content.String())
 
 	if len(matches) > 0 {
 		dbo.ObjSubtype = "TABLE"

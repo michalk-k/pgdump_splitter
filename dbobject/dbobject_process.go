@@ -18,14 +18,13 @@ var rgx_common *regexp.Regexp
 var rgx_ExclDb *regexp.Regexp
 var rgx_WhiteListDb *regexp.Regexp
 
-var allow_current_db bool = false
-
 func init() {
 	rgx_conn = regexp.MustCompile(`^\\connect( -reuse-previous=on)? (("dbname='(.*?)'")|(.*))`)
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump = regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
 	rgx_roles = regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
-	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: "?(?P<Name>.*)"?; Type: (?P<Type>.*); Schema: "?(?P<Schema>.*)"?;`)
+	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
+
 }
 
 // Prepare input streams into scanner and pass it to for processing
@@ -51,8 +50,7 @@ func StartProcessing(args *Config) error {
 		return err
 	}
 
-	// Optionally remove - subdirectory (if exists).
-	// it contains roles data created from pgdumpall
+	// Remove cluster subdirectory (if exists), if Move Cluster Data has been selected
 	if args.MvRl {
 		if err = os.RemoveAll(filepath.Join(args.Dest, "-")); err != nil {
 			return err
@@ -131,7 +129,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 		// Reacts on row:
 		// \connect database_name
-		if db := InitDatabaseFromLine(line); db != "" {
+		if db := InitDatabaseFromLine(&line); db != "" {
 
 			dbname = db
 
@@ -156,7 +154,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 			// -- User Config "user_name"
 			// Starts collecting data for obj type ROLE
 
-			if obj := InitRoleObjFromLine(line, *args, dbname); obj != nil {
+			if obj := InitRoleObjFromLine(&line, args, dbname); obj != nil {
 
 				if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 					return err
@@ -173,19 +171,23 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// -- PostgreSQL database dump
 		// -- PostgreSQL database dump complete
 		//
-		// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
+		// Database init ends cluster data (retmode = 2)
+		// Completion of database (retmode = 2), triggers copying user roles into the database structure (if enabled by configuration)
+		// New users (retmode = 1) - still in cluster part
 		//
-		// POSSIBLY NO REINIT OBJECT IN EndOfCluster for rgx_users
-		//
-
-		retmode, err := EndOfCluster(line, *args, dbname)
-
-		if err != nil {
-			return err
-		}
+		retmode := EndOfCluster(&line, args, dbname)
 
 		if retmode == 2 {
 			clusterphase = false
+		}
+
+		if retmode == 0 {
+
+			if args.MvRl && enableCurrentDb(dbname) {
+				if err := RelocateClusterRoles(args.Dest, dbname); err != nil {
+					return err
+				}
+			}
 		}
 
 		if retmode > 0 {
@@ -209,7 +211,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		//
 		// Starts collecting data for obj type ROLE
 		// If type is TABLE DATA, data are not being added to the object (for performance reasons)
-		obj := InitCommonObjFromLine(line, *args, dbname)
+		obj := InitCommonObjFromLine(&line, args, dbname)
 		if obj != nil {
 
 			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
@@ -221,7 +223,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		}
 
 		if curObj.ObjType != "" && curObj.ObjType != "TABLE DATA" {
-			curObj.Content = curObj.Content + line
+			curObj.appendContent(&line)
 		}
 
 	}
@@ -239,9 +241,9 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 	return nil
 }
 
-func InitDatabaseFromLine(line string) string {
+func InitDatabaseFromLine(line *string) string {
 
-	matches := rgx_conn.FindStringSubmatch(line)
+	matches := rgx_conn.FindStringSubmatch(*line)
 
 	if len(matches) > 0 {
 		if matches[4] != "" {
@@ -254,46 +256,57 @@ func InitDatabaseFromLine(line string) string {
 	return ""
 }
 
-func EndOfCluster(line string, args Config, dbname string) (int, error) {
+// When completion of database is recognized, we copy user roles into it (if enabled by configuration)
 
-	matches := rgx_dbdump.FindStringSubmatch(line)
+func EndOfCluster(line *string, args *Config, dbname string) int {
 
-	if len(matches) > 0 {
-
-		if matches[1] == "complete" {
-
-			if args.MvRl && enableCurrentDb(dbname) {
-				if err := RelocateClusterRoles(filepath.Join(args.Dest, "-"), filepath.Join(args.Dest, dbname, "-")); err != nil {
-					return 0, err
-				}
-			}
-
-		} else {
-			return 2, nil // cluster is finished. db is starting
-		}
-
-		return 1, nil
+	if retmode := MatchDbStartEnd(line); retmode != -1 {
+		return retmode
 	}
 
-	matches = rgx_users.FindStringSubmatch(line)
+	return MatchUsersAndDatabasesStart(line)
+
+}
+
+// Regognize beginning or the end of database dump
+// returned values (int)
+// 0: database end
+// 2: database start
+// -1: unmatched
+func MatchDbStartEnd(line *string) int {
+	matches := rgx_dbdump.FindStringSubmatch(*line)
+
+	if len(matches) > 0 {
+		if matches[1] == "complete" {
+			return 0
+		} else {
+			return 2 // begining of database. Means end of cluster data
+		}
+	}
+
+	return -1
+}
+
+func MatchUsersAndDatabasesStart(line *string) int {
+
+	matches := rgx_users.FindStringSubmatch(*line)
 
 	if len(matches) > 0 {
 
 		if matches[1] == "Databases" {
-			return 2, nil
+			return 2
 		}
 
-		return 1, nil
+		return 1
 
 	}
 
-	return 0, nil // cluster is continuing
-
+	return 0 // cluster is continuing
 }
 
-func InitRoleObjFromLine(line string, args Config, dbname string) *DbObject {
+func InitRoleObjFromLine(line *string, args *Config, dbname string) *DbObject {
 
-	matches := rgx_roles.FindStringSubmatch(line)
+	matches := rgx_roles.FindStringSubmatch(*line)
 
 	if len(matches) == 0 {
 		return nil
@@ -301,7 +314,7 @@ func InitRoleObjFromLine(line string, args Config, dbname string) *DbObject {
 
 	// Iterate over each match
 	result := make(map[string]string)
-	for i, name := range rgx_common.SubexpNames() {
+	for i, name := range rgx_roles.SubexpNames() {
 		if i != 0 && name != "" {
 			result[name] = matches[i]
 		}
@@ -330,10 +343,9 @@ func InitRoleObjFromLine(line string, args Config, dbname string) *DbObject {
 
 }
 
-func InitCommonObjFromLine(line string, args Config, dbname string) *DbObject {
+func InitCommonObjFromLine(line *string, args *Config, dbname string) *DbObject {
 
-	rgx_common := regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
-	matches := rgx_common.FindStringSubmatch(line)
+	matches := rgx_common.FindStringSubmatch(*line)
 
 	if len(matches) == 0 {
 		return nil
@@ -393,15 +405,20 @@ func Save(dbo *DbObject, exdb_rgx *regexp.Regexp, wldb_rgx *regexp.Regexp) error
 		return nil
 	}
 
-	if dbo.Content != "" {
+	if dbo.Content.Len() > 0 {
 		return dbo.StoreObj()
 	}
 
 	return nil
 }
 
-func RelocateClusterRoles(srcDir string, destDir string) error {
-	if err := fu.CopyDir(srcDir, destDir); err != nil {
+// Moves roles from root, to each database location.
+func RelocateClusterRoles(destpath string, dbname string) error {
+
+	var srcloc = filepath.Join(destpath, "-")
+	var dstloc = filepath.Join(destpath, dbname, "-")
+
+	if err := fu.CopyDir(srcloc, dstloc); err != nil {
 		return err
 	}
 
