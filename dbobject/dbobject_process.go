@@ -23,7 +23,7 @@ func init() {
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump = regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
 	rgx_roles = regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
-	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: (?P<Name>.*); Type: (?P<Type>.*); Schema: (?P<Schema>.*);`)
+	rgx_common = regexp.MustCompile(`^-- (Data for )?Name: "?(?P<Name>.*)"?; Type: (?P<Type>.*); Schema: "?(?P<Schema>.*)"?;`)
 
 }
 
@@ -36,20 +36,25 @@ func StartProcessing(args *Config) error {
 	output.Println("Destination location: " + args.Dest)
 	output.Println(fmt.Sprintf("Clean destination location: %t", args.Cln))
 
+	// Check regular expression before any processing
 	if err := IsDocuRegexOk(args.Docu); err != nil {
 		return err
 	}
 
+	// wipe destination directory if requested.
+	// leaving data might result in appending DDLs to existing files
 	if args.Cln {
 		if err = fu.WipeDir(args.Dest); err != nil {
 			return err
 		}
 	}
 
+	// Create scanner, either from system pipe or given file
 	if err := dataprov.CreateScanner(args); err != nil {
 		return err
 	}
 
+	// Execute processing
 	if err = ProcessStream(args, dataprov.scanner); err != nil {
 		return err
 	}
@@ -65,6 +70,7 @@ func StartProcessing(args *Config) error {
 
 }
 
+// Decide whethere currently scanned database is selected/blacklisted
 func enableCurrentDb(dbname string) bool {
 
 	if rgx_WhiteListDb != nil {
@@ -86,6 +92,8 @@ func enableCurrentDb(dbname string) bool {
 	return true
 }
 
+// Decide whether collected object should be stored into file or not.
+// Decision is made based on database it belongs to and the fact it's whitelisted/blacklisted
 func allowObject(dbo *DbObject) bool {
 
 	if dbo.ObjType == "DATABASE" {
