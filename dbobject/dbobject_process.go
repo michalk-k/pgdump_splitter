@@ -186,6 +186,8 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		// Database init ends cluster data (retmode = 2)
 		// Completion of database (retmode = 2), triggers copying user roles into the database structure (if enabled by configuration)
 		// New users (retmode = 1) - still in cluster part
+		// Any other found token (retmode = 0)
+		// no token found (retmode = -1)
 		//
 		retmode := EndOfCluster(&line, args, dbname)
 
@@ -193,7 +195,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 			clusterphase = false
 		}
 
-		if retmode == 0 {
+		if retmode == 2 {
 
 			if args.MvRl && enableCurrentDb(dbname) {
 				if err := RelocateClusterRoles(args.Dest, dbname); err != nil {
@@ -202,7 +204,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 			}
 		}
 
-		if retmode > 0 {
+		if retmode >= 0 {
 
 			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
 				return err
@@ -313,7 +315,7 @@ func MatchUsersAndDatabasesStart(line *string) int {
 
 	}
 
-	return 0 // cluster is continuing
+	return -1
 }
 
 func InitRoleObjFromLine(line *string, args *Config, dbname string) *DbObject {
