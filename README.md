@@ -38,6 +38,9 @@ The program scans dump files line by line executing regular expression matching 
 `-- PostgreSQL database dump complete`\
 `-- Name: some_string; Type: some_string; Schema: some_string;`\
 `-- Data for Name: some_string; Type: some_string; Schema: some_string;`
+
+The utility is not designed to accommodate databases with object names containing space characters.
+The utility relies on metadata extracted from comments in SQL dumps to identify database objects. Regrettably, the accuracy of these metadata often suffers when object names include spaces, thereby rendering proper data segmentation impossible.
    
 # Usage
 `pgdump_splitter {options} -f {dump_file}`\
