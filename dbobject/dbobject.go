@@ -399,6 +399,8 @@ func (dbo *DbObject) normalizeDbObject() error {
 	case "DEFAULT":
 		err = dbo.normalizeSubtypes2("TABLE")
 	case "SEQUENCE SET":
+		dbo.ObjSubtype = "SEQUENCE"
+		dbo.ObjSubName = dbo.Name
 		err = dbo.normalizeSubtypes2("SEQUENCE")
 	case "SEQUENCE OWNED BY":
 		err = dbo.normalizeSubtypes2("SEQUENCE")

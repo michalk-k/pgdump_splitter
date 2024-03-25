@@ -29,6 +29,21 @@ func TestArgumentsEncoding(t *testing.T) {
 
 }
 
+func TestGetFuncIdentParts(t *testing.T) {
+
+	want_fc, want_args := "send_email", "text, public.hstore, text, text, text"
+	fc, args := getFuncIdentParts("send_email(text, public.hstore, text, text, text)")
+
+	if want_fc != fc {
+		t.Errorf("got %s, wants %s", fc, want_fc)
+	}
+
+	if want_args != args {
+		t.Errorf("got %s, wants %s", args, want_args)
+	}
+
+}
+
 func TestRemoveArgumentsFromFunction(t *testing.T) {
 
 	want := ""
@@ -61,6 +76,16 @@ func TestRemoveArgumentsFromFunction(t *testing.T) {
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
+
+	want = "text, public.hstore, text, text, text"
+	got = NormalizeFunctionIdentArgs("text, public.hstore, text, text, text")
+
+	if want != got {
+		t.Errorf("got %s, wants %s", got, want)
+	}
+
+	//	"Name: send_email(text, public.hstore, text, text, text); Type: FUNCTION; Schema: communication_api; Owner: sazky"
+
 }
 
 func TestFuncionPath1_custom(t *testing.T) {

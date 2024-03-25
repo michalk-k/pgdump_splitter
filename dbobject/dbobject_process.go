@@ -18,6 +18,8 @@ var rgx_common *regexp.Regexp
 var rgx_ExclDb *regexp.Regexp
 var rgx_WhiteListDb *regexp.Regexp
 
+var rgx_ExcludeObjType *regexp.Regexp
+
 func init() {
 	rgx_conn = regexp.MustCompile(`^\\connect( -reuse-previous=on)? (("dbname='(.*?)'")|(.*))`)
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
@@ -38,6 +40,11 @@ func StartProcessing(args *Config) error {
 
 	// Check regular expression before any processing
 	if err := IsDocuRegexOk(args.Docu); err != nil {
+		return err
+	}
+
+	// Check regular expression before any processing
+	if err := IsExclObjTypeOk(args.ExOT); err != nil {
 		return err
 	}
 
@@ -70,6 +77,24 @@ func StartProcessing(args *Config) error {
 
 }
 
+// Check wether regular expression (given by a user) is compilable
+// If so, assign to the rgx_ExcludeObjType
+func IsExclObjTypeOk(rgx string) error {
+
+	if rgx == "" {
+		return nil
+	}
+
+	var err error
+
+	if rgx_ExcludeObjType, err = regexp.Compile(rgx); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 // Decide whethere currently scanned database is selected/blacklisted
 func enableCurrentDb(dbname string) bool {
 
@@ -95,6 +120,13 @@ func enableCurrentDb(dbname string) bool {
 // Decide whether collected object should be stored into file or not.
 // Decision is made based on database it belongs to and the fact it's whitelisted/blacklisted
 func allowObject(dbo *DbObject) bool {
+
+	// Exclude objects by type given by regular expression passed with prog arguments
+	if rgx_ExcludeObjType != nil {
+		if rgx_ExcludeObjType.MatchString(dbo.ObjType) || rgx_ExcludeObjType.MatchString(dbo.ObjSubtype) {
+			return false
+		}
+	}
 
 	if dbo.ObjType == "DATABASE" {
 		return enableCurrentDb(dbo.Name)
@@ -145,7 +177,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 			dbname = db
 
-			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+			if err := Save(&curObj); err != nil {
 				return err
 			}
 
@@ -168,7 +200,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 			if obj := InitRoleObjFromLine(&line, args, dbname); obj != nil {
 
-				if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+				if err := Save(&curObj); err != nil {
 					return err
 				}
 
@@ -206,7 +238,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 		if retmode >= 0 {
 
-			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+			if err := Save(&curObj); err != nil {
 				return err
 			}
 
@@ -228,7 +260,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		obj := InitCommonObjFromLine(&line, args, dbname)
 		if obj != nil {
 
-			if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+			if err := Save(&curObj); err != nil {
 				return err
 			}
 
@@ -237,13 +269,14 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		}
 
 		if curObj.ObjType != "" && curObj.ObjType != "TABLE DATA" {
+
 			curObj.appendContent(&line)
 		}
 
 	}
 
 	// save the last row remaining in the buffer
-	if err := Save(&curObj, rgx_ExclDb, rgx_WhiteListDb); err != nil {
+	if err := Save(&curObj); err != nil {
 		return err
 	}
 
@@ -413,7 +446,7 @@ func preserveNewlines(data []byte, atEOF bool) (advance int, token []byte, err e
 	return 0, nil, nil
 }
 
-func Save(dbo *DbObject, exdb_rgx *regexp.Regexp, wldb_rgx *regexp.Regexp) error {
+func Save(dbo *DbObject) error {
 
 	if !allowObject(dbo) {
 		return nil
