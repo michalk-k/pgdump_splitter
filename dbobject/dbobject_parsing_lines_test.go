@@ -35,7 +35,7 @@ func TestEndOfCluster(t *testing.T) {
 	src := "some text"
 	got = MatchUsersAndDatabasesStart(&src)
 
-	if want != got {
+	if want == got {
 		t.Errorf("got %d, wants %d", got, want)
 	}
 
@@ -145,6 +145,32 @@ func TestOfInitCommonObjFromLine(t *testing.T) {
 
 	src = "-- Name: quote_empty(character varying, integer[]); Type: FUNCTION; Schema: utl; Owner: sazky"
 	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
+
+	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
+		t.Errorf("test 2 failed")
+	}
+
+}
+
+func TestOfCompleteObjProcessing_Function(t *testing.T) {
+
+	var cfg Config
+	var dbname = "db_name"
+	var dbo DbObject
+
+	src := "-- Name: quote_empty(character varying, integer[]); Type: FUNCTION; Schema: utl; Owner: sazky"
+	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
+
+	dbo.generateDestinationPath()
+
+	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
+		t.Errorf("test 2 failed")
+	}
+
+	src = "-- Name: quote_empty(character varying, integer[]); Type: FUNCTION; Schema: utl; Owner: sazky"
+	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
+
+	dbo.generateDestinationPath()
 
 	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
 		t.Errorf("test 2 failed")

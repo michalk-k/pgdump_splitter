@@ -6,34 +6,57 @@ import (
 	"testing"
 )
 
+//
+
+func TestArgumentsEncoding(t *testing.T) {
+
+	want := ""
+	got := ""
+
+	want = "quote_empty-02103c"
+	got = generateFuncFilename("quote_empty", "character varying, integer[]")
+
+	if want != got {
+		t.Errorf("got %s, wants %s", got, want)
+	}
+
+	want = "quote_empty"
+	got = generateFuncFilename("quote_empty", "")
+
+	if want != got {
+		t.Errorf("got %s, wants %s", got, want)
+	}
+
+}
+
 func TestRemoveArgumentsFromFunction(t *testing.T) {
 
 	want := ""
 	got := ""
 
-	want = "avals(public.hstore)"
-	got = removeArgNamesFromFunctionIdent("avals(public.hstore)")
+	want = "public.hstore"
+	got = NormalizeFunctionIdentArgs("public.hstore")
 
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
-	want = "column_names(text, text, text[], text[])"
-	got = removeArgNamesFromFunctionIdent("column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])")
+	want = "text, text, text[], text[]"
+	got = NormalizeFunctionIdentArgs("_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[]")
 
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
-	want = "connectby(text, text, text, text, integer)"
-	got = removeArgNamesFromFunctionIdent("connectby(text, text, text, text, integer)")
+	want = "text, text, text, text, integer"
+	got = NormalizeFunctionIdentArgs("text, text, text, text, integer")
 
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
 	}
 
-	want = "pg_stat_statements(boolean, oid, oid, boolean, bigint))"
-	got = removeArgNamesFromFunctionIdent("pg_stat_statements(showtext boolean, OUT userid oid, OUT dbid oid, OUT toplevel boolean, OUT queryid bigint))")
+	want = "boolean, oid, oid, boolean, bigint"
+	got = NormalizeFunctionIdentArgs("showtext boolean, OUT userid oid, OUT dbid oid, OUT toplevel boolean, OUT queryid bigint")
 
 	if want != got {
 		t.Errorf("got %s, wants %s", got, want)
@@ -55,7 +78,7 @@ func TestFuncionPath1_custom(t *testing.T) {
 	dbo.normalizeDbObject()
 	dbo.generateDestinationPath()
 
-	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
+	want := DbObject{Schema: "public", Name: "avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
 		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "avals-c66339", FullPath: "/root/public/function/avals-c66339.sql", IsCustom: true},
 	}
 
@@ -79,8 +102,8 @@ func TestFuncionPath1_orig(t *testing.T) {
 	dbo.normalizeDbObject()
 	dbo.generateDestinationPath()
 
-	want := DbObject{Schema: "public", Name: "FUNCTION avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
-		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "FUNCTION avals-c66339", FullPath: "/root/public/ACL/FUNCTION avals-c66339.sql", IsCustom: false},
+	want := DbObject{Schema: "public", Name: "avals(public.hstore)", ObjType: "ACL", ObjSubtype: "FUNCTION", ObjSubName: "avals(public.hstore)",
+		Paths: DbObjPath{Rootpath: "/root/", NameForFile: "avals-c66339", FullPath: "/root/public/ACL/avals-c66339.sql", IsCustom: false},
 	}
 
 	if !reflect.DeepEqual(dbo, want) {
@@ -103,7 +126,7 @@ func TestFuncionPath2(t *testing.T) {
 
 	want := DbObject{
 		Schema:     "public",
-		Name:       "FUNCTION column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
+		Name:       "column_names(text, text, text[], text[])",
 		ObjType:    "ACL",
 		ObjSubtype: "FUNCTION",
 		ObjSubName: "column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
@@ -136,14 +159,14 @@ func TestFuncionPath2_orig(t *testing.T) {
 
 	want := DbObject{
 		Schema:     "public",
-		Name:       "FUNCTION column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
+		Name:       "column_names(text, text, text[], text[])",
 		ObjType:    "ACL",
 		ObjSubtype: "FUNCTION",
 		ObjSubName: "column_names(_schema_name text, _table_name text, _not_in_column_names text[], _not_in_data_types text[])",
 		Paths: DbObjPath{
 			Rootpath:    "/root/",
-			NameForFile: "FUNCTION column_names-a09c34",
-			FullPath:    "/root/public/ACL/FUNCTION column_names-a09c34.sql",
+			NameForFile: "column_names-a09c34",
+			FullPath:    "/root/public/ACL/column_names-a09c34.sql",
 			IsCustom:    false,
 		},
 	}

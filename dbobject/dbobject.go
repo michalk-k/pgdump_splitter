@@ -16,8 +16,10 @@ var rgx_normalize_subtypes_a *regexp.Regexp
 var rgx_normalize_subtypes_b *regexp.Regexp
 var rgx_normalize_subtypes2 *regexp.Regexp
 var rgx_genFunctionName *regexp.Regexp
-var rgx_remArgNames_a *regexp.Regexp
-var rgx_remArgNames_b *regexp.Regexp
+var rgx_fncNormArgNames_b *regexp.Regexp
+var rgx_fncNormArgNames_c *regexp.Regexp
+
+var Rgx_fncDocu *regexp.Regexp
 
 func init() {
 
@@ -26,8 +28,10 @@ func init() {
 	rgx_normalize_subtypes_b = regexp.MustCompile(`^([\S]+)\.([\S]+)$`)
 	rgx_normalize_subtypes2 = regexp.MustCompile(`^(.*) (.*)$`)
 	rgx_genFunctionName = regexp.MustCompile(`^(FUNCTION )?(.*)\((.*)\)$`)
-	rgx_remArgNames_a = regexp.MustCompile(", (OUT )?([[:word:]$]+)[ ]")
-	rgx_remArgNames_b = regexp.MustCompile(`\(([[:word:]$]+ )`)
+
+	rgx_fncNormArgNames_b = regexp.MustCompile(`.*( DEFAULT.*)$`)
+	rgx_fncNormArgNames_c = regexp.MustCompile(`(.*?)(((double precision|character varying|time without time zone|timestamp without time zone|timestamp with time zone|time with time zone|bit varying)|([\S]+))(\[\])?)`)
+
 }
 
 type DbObjPath struct {
@@ -66,7 +70,9 @@ func IsDocuRegexOk(rgx string) error {
 		return nil
 	}
 
-	if _, err := regexp.Compile(`(?s)` + rgx); err != nil {
+	var err error
+
+	if Rgx_fncDocu, err = regexp.Compile(`(?s)` + rgx); err != nil {
 		return err
 	}
 
@@ -81,11 +87,6 @@ func (obj *DbObject) extractDocu() error {
 		return nil
 	}
 
-	Content, err := os.ReadFile(obj.Paths.FullPath)
-	if err != nil {
-		return fmt.Errorf("Error opening file: " + obj.Paths.FullPath)
-	}
-
 	// Defer a function that recovers from MustCompile panic
 	defer func() error {
 		if r := recover(); r != nil {
@@ -94,24 +95,21 @@ func (obj *DbObject) extractDocu() error {
 		return nil
 	}()
 
-	rgx, err := regexp.Compile(`(?s)` + obj.DocuRgx)
-	if err != nil {
-		return fmt.Errorf("invalid regular expression for extracting documentation")
+	newfile := filepath.Join(
+		filepath.Dir(obj.Paths.FullPath),
+		strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath))+".md")
+
+	content := "# " + obj.Schema + "." + obj.Name
+
+	matches := Rgx_fncDocu.FindSubmatch([]byte(obj.Content.String()))
+	if len(matches) > 1 {
+		content += "\n" + string(matches[1])
 	}
 
-	matches := rgx.FindSubmatch(Content)
-	if len(matches) > 1 {
+	content += "\n [Back to function list](../readme.md)\n"
 
-		newfile := filepath.Join(
-			filepath.Dir(obj.Paths.FullPath),
-			strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath))+".md")
-
-		content := strings.Trim(string(matches[1]), " -\n") + "\n"
-
-		if err := os.WriteFile(newfile, []byte(content), 0777); err != nil {
-			return fmt.Errorf("error while writing file: %s", newfile)
-		}
-
+	if err := os.WriteFile(newfile, []byte(content), 0777); err != nil {
+		return fmt.Errorf("error while writing file: %s", newfile)
 	}
 
 	return nil
@@ -164,40 +162,41 @@ func (obj *DbObject) StoreObj() error {
 }
 
 // In some cases pgdump generates function identifiers containing argument names, incl OUT keyword
-// this funciton stripes unwanted parts our from the identifier.
+// this function stripes unwanted parts our from the identifier.
 // Note, it's naive, condidering the input string is in requested format.
 // There is no validation for that, so passing proper identifier will brake the result.
-func removeArgNamesFromFunctionIdent(funcident string) string {
+func NormalizeFunctionIdentArgs(funcargs string) string {
 
-	funcident = rgx_remArgNames_a.ReplaceAllLiteralString(funcident, ", ")
+	argsarr := strings.Split(funcargs, ", ")
 
-	funcident = rgx_remArgNames_b.ReplaceAllString(funcident, "(")
+	for i := 0; i < len(argsarr); i++ {
 
-	return funcident
+		argsarr[i] = rgx_fncNormArgNames_b.ReplaceAllString(argsarr[i], "")
+		argmatches := rgx_fncNormArgNames_c.FindAllString(argsarr[i], -1)
+
+		if len(argmatches) > 0 {
+			argsarr[i] = strings.Trim(argmatches[len(argmatches)-1], " ")
+		}
+	}
+
+	funcargs = strings.Join(argsarr, ", ")
+
+	return funcargs
 }
 
-// Generate filename of the db function
-// Special treatment is needed due to possibility of going beyond limits of file path length.
-// It might happen in case of higher number of function arguments
-//
-// In this implementation, the function arguments are replaced by md5 hash calculated from string representing the arguments
-func generateFunctionFileName(funcident string) string {
+func getFuncIdentParts(funcident string) (string, string) {
 
 	parts := rgx_genFunctionName.FindStringSubmatch(funcident)
 
 	if len(parts) == 0 {
-		return ""
+		return "", ""
 	}
 
 	if parts[3] != "" {
-		return parts[1] + parts[2] + "-" + funcArgsToHash(parts[3])[0:6]
+		return parts[2], parts[3]
 	}
 
-	if len(parts) > 0 {
-		return parts[1] + parts[2]
-	}
-
-	return ""
+	return parts[2], ""
 }
 
 // Modifies meta information of object, of some of their data are stored name of the object
@@ -282,9 +281,10 @@ func (dbo *DbObject) generateDestinationPath() {
 
 	if dbo.ObjSubtype == "FUNCTION" || dbo.ObjType == "FUNCTION" {
 
-		name = removeArgNamesFromFunctionIdent(name)
-
-		name = generateFunctionFileName(name)
+		fname, args := getFuncIdentParts(dbo.Name)
+		args = NormalizeFunctionIdentArgs(args)
+		dbo.Name = fname + "(" + args + ")"
+		name = generateFuncFilename(fname, args)
 	}
 
 	dbo.Paths.NameForFile = name
@@ -296,6 +296,20 @@ func (dbo *DbObject) generateDestinationPath() {
 		dbo.generateDestinationPathOrigin()
 	}
 
+}
+
+// Generate filename of the db function
+// Special treatment is needed due to possibility of going beyond limits of file path length.
+// It might happen in case of higher number of function arguments
+//
+// In this implementation, the function arguments are replaced by md5 hash calculated from string representing the arguments
+func generateFuncFilename(fname string, args string) string {
+
+	if args == "" {
+		return fname
+	}
+
+	return fname + "-" + funcArgsToHash(args)[0:6]
 }
 
 func (dbo *DbObject) generateDestinationPathOrigin() {
