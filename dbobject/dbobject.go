@@ -108,7 +108,7 @@ func (obj *DbObject) extractDocu() error {
 
 	content += "\n [Back to function list](../readme.md)\n"
 
-	if err := os.WriteFile(newfile, []byte(content), 0777); err != nil {
+	if err := os.WriteFile(newfile, []byte(content), 0644); err != nil {
 		return fmt.Errorf("error while writing file: %s", newfile)
 	}
 
