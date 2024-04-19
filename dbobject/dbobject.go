@@ -279,7 +279,7 @@ func (dbo *DbObject) generateDestinationPath() {
 		name = dbo.Name
 	}
 
-	if dbo.ObjSubtype == "FUNCTION" || dbo.ObjType == "FUNCTION" {
+	if dbo.ObjSubtype == "FUNCTION" || dbo.ObjType == "FUNCTION" || dbo.ObjSubtype == "PROCEDURE" || dbo.ObjType == "PROCEDURE" {
 
 		fname, args := getFuncIdentParts(dbo.Name)
 		args = NormalizeFunctionIdentArgs(args)
