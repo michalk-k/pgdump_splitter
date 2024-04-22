@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["-f", "/home/kozusznikm/!tmp/dump/dump_seqset.sql", "-dst", "/home/kozusznikm/!tmp/structures2/", "-mc", "-mode", "custom", "-clean", "-aclfiles"],
+            "args": ["-f", "/home/kozusznikm/!tmp/dump/dumpall2.sql", "-dst", "/home/kozusznikm/!tmp/structures2/", "-mc", "-mode", "custom", "-clean", "-aclfiles"],
         }
     ]
 }

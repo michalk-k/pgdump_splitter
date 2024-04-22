@@ -229,7 +229,7 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 
 		if retmode == 2 {
 
-			if args.MvRl && enableCurrentDb(dbname) {
+			if args.MvRl && dbname != "" && enableCurrentDb(dbname) {
 				if err := RelocateClusterRoles(args.Dest, dbname); err != nil {
 					return err
 				}

@@ -1,6 +1,7 @@
 package fileutils
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ func CreateFile(filefullpath string) (bool, error) {
 
 // CopyDir copies the contents of a source directory to a destination directory recursively.
 func CopyDir(src, dest string) error {
+
 	// Create destination directory if it doesn't exist
 	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
 		return err
@@ -65,6 +67,11 @@ func CopyDir(src, dest string) error {
 
 // CopyFile copies a file from source to destination.
 func CopyFile(src, dest string) error {
+
+	if filepath.Clean(src) == filepath.Clean(dest) {
+		return fmt.Errorf("source and destination paths are the same: %s -> %s", src, dest)
+	}
+
 	// Open source file
 	srcFile, err := os.Open(src)
 	if err != nil {
@@ -73,7 +80,7 @@ func CopyFile(src, dest string) error {
 	defer srcFile.Close()
 
 	// Create destination file
-	destFile, err := os.Create(dest)
+	destFile, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
