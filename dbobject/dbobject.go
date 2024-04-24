@@ -27,7 +27,7 @@ func init() {
 	rgx_normalize_subtypes_a = regexp.MustCompile(`^([A-Z ]+) (.*)$`)
 	rgx_normalize_subtypes_b = regexp.MustCompile(`^([\S]+)\.([\S]+)$`)
 	rgx_normalize_subtypes2 = regexp.MustCompile(`^(.*) (.*)$`)
-	rgx_genFunctionName = regexp.MustCompile(`^(FUNCTION )?(.*)\((.*)\)$`)
+	rgx_genFunctionName = regexp.MustCompile(`^((FUNCTION|PROCEDURE) )?(.*)\((.*)\)$`)
 
 	rgx_fncNormArgNames_b = regexp.MustCompile(`.*( DEFAULT.*)$`)
 	rgx_fncNormArgNames_c = regexp.MustCompile(`(.*?)(((double precision|character varying|time without time zone|timestamp without time zone|timestamp with time zone|time with time zone|bit varying)|([\S]+))(\[\])?)`)
@@ -193,10 +193,10 @@ func getFuncIdentParts(funcident string) (string, string) {
 	}
 
 	if parts[3] != "" {
-		return parts[2], parts[3]
+		return parts[3], parts[4]
 	}
 
-	return parts[2], ""
+	return parts[3], ""
 }
 
 // Modifies meta information of object, of some of their data are stored name of the object

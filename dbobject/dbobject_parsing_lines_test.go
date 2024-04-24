@@ -140,14 +140,14 @@ func TestOfInitCommonObjFromLine(t *testing.T) {
 	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
 
 	if !(dbo.ObjType == "TABLE" && dbo.Name == "lst_permissions" && dbo.Schema == "app_permissions" && dbo.Database == dbname) {
-		t.Errorf("test 2 failed")
+		t.Errorf("test 3 failed")
 	}
 
 	src = "-- Name: quote_empty(character varying, integer[]); Type: FUNCTION; Schema: utl; Owner: sazky"
 	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
 
 	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
-		t.Errorf("test 2 failed")
+		t.Errorf("test 4 failed")
 	}
 
 }
@@ -164,7 +164,7 @@ func TestOfCompleteObjProcessing_Function(t *testing.T) {
 	dbo.generateDestinationPath()
 
 	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
-		t.Errorf("test 2 failed")
+		t.Errorf("test 1 failed")
 	}
 
 	src = "-- Name: quote_empty(character varying, integer[]); Type: FUNCTION; Schema: utl; Owner: sazky"
@@ -174,6 +174,24 @@ func TestOfCompleteObjProcessing_Function(t *testing.T) {
 
 	if !(dbo.ObjType == "FUNCTION" && dbo.Name == "quote_empty(character varying, integer[])" && dbo.Schema == "utl" && dbo.Database == dbname) {
 		t.Errorf("test 2 failed")
+	}
+
+	src = "-- Name: FUNCTION user_lookup(_rolename text); Type: ACL; Schema: pgbouncer; Owner: app_dbconnect"
+	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
+	dbo.normalizeDbObject()
+	dbo.generateDestinationPath()
+
+	if !(dbo.ObjType == "ACL" && dbo.ObjSubtype == "FUNCTION" && dbo.Name == "user_lookup(text)" && dbo.Schema == "pgbouncer" && dbo.Database == dbname && dbo.Paths.FullPath == "db_name/pgbouncer/ACL/user_lookup-1cb251.sql") {
+		t.Errorf("test 3 failed")
+	}
+
+	src = "-- Name: PROCEDURE run_partition_maintenance(IN _parent regclass, IN _analyze boolean, IN _jobmon boolean); Type: ACL; Schema: greep; Owner: sazky"
+	dbo = *InitCommonObjFromLine(&src, &cfg, dbname)
+	dbo.normalizeDbObject()
+	dbo.generateDestinationPath()
+
+	if !(dbo.ObjType == "ACL" && dbo.ObjSubtype == "PROCEDURE" && dbo.Name == "run_partition_maintenance(regclass, boolean, boolean)" && dbo.Schema == "greep" && dbo.Database == dbname && dbo.Paths.FullPath == "db_name/greep/ACL/run_partition_maintenance-b76d04.sql") {
+		t.Errorf("test 4 failed")
 	}
 
 }
