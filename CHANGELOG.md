@@ -1,4 +1,6 @@
 # CHANGELOG
+## 1.0.4
+* fix: NOT VALID check constraints are not included to table DDL. Appended now with mode=custom
 
 ## 1.0.3
 * fix: improperly parsed meta for procedure's ACLs

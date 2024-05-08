@@ -390,6 +390,8 @@ func (dbo *DbObject) normalizeDbObject() error {
 		err = dbo.normalizeSubtypes()
 	case "FK CONSTRAINT":
 		err = dbo.normalizeSubtypes2("TABLE")
+	case "CHECK CONSTRAINT":
+		err = dbo.normalizeSubtypes2("TABLE")
 	case "CONSTRAINT":
 		err = dbo.normalizeSubtypes2("TABLE")
 	case "TRIGGER":
