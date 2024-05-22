@@ -1,4 +1,7 @@
 # CHANGELOG
+## 1.0.5
+* fix: extract DOCU from procedures
+
 ## 1.0.4
 * fix: NOT VALID check constraints are not included to table DDL. Appended now with mode=custom
 

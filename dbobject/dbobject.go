@@ -83,7 +83,7 @@ func IsDocuRegexOk(rgx string) error {
 // Extracts documentation (DOCU section) from the contect.
 func (obj *DbObject) extractDocu() error {
 
-	if !(obj.ObjType == "FUNCTION" && obj.DocuRgx != "") {
+	if !((obj.ObjType == "FUNCTION" || obj.ObjType == "PROCEDURE") && obj.DocuRgx != "") {
 		return nil
 	}
 
