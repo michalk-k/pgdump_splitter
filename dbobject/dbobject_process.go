@@ -280,6 +280,13 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		return err
 	}
 
+	// at end of the file, move roles to db location if requested
+	if args.MvRl && dbname != "" && enableCurrentDb(dbname) {
+		if err := RelocateClusterRoles(args.Dest, dbname); err != nil {
+			return err
+		}
+	}
+
 	// Check for any errors that may have occurred during scanning
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("%s. Fails on line: %d.\nConsider setting buffer size to higher value", err.Error(), lineno+1)
