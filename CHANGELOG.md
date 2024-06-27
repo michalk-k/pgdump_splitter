@@ -1,4 +1,10 @@
 # CHANGELOG
+# 1.1.0
+* removed extracting documentation from function source code (`-doc` parameter)
+
+## 1.0.6
+* fix: no roles copied for the last database in the cluster if -mc switch is enabled
+
 ## 1.0.5
 * fix: extract DOCU from procedures
 

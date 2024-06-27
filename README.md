@@ -11,7 +11,6 @@ The decision to structure the data across multiple files stems from the necessit
 5. Allows grouping of related objects into a single file (ie table together with its acls, comments, column comments, defaults etc)
 6. Allows to move role definitions, privileges and config to the substructure of each database
 7. Files containing functions have filenames shortened to avoid exceeding the maximum file length allowed by the filesystem/os
-8. Extracts documentation found in functions code
 
 ## Modes
 The utility provides two modes of reflecting dump stems on filesystem objects (files).
@@ -88,11 +87,7 @@ Command-line options listed below, control the `pgdump_splitter` utility. Becaus
 
 `-mc`
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Copy files containing role-related definitions into each database subdirectory. Otherwise they will be found in '{dst}/-/' subdirectory
-
-`-doc=regular.expression`
-
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Regular expression used to extract documentation out of function source code into separate .md files. Set empty to disable this feature. The default is `/*DOCU(.*)DOCU*/`. 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Copy files containing role-related definitions into each database subdirectory. Otherwise they will be found in '{dst}/-/' subdirectory 
 
 `-buffer=number`
 

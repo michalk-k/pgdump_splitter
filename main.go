@@ -22,7 +22,6 @@ func main() {
 	flag.StringVar(&args.ExDb, "blacklist-db", "^(template|postgres)", "Regular expression pattern allowing to skip extraction of matching databases. Usefull in case of processing dump files. In case of using a pipe from pg_dumpall, exclude them using pd_dumpall switch.")
 	flag.StringVar(&args.WlDb, "whitelist-db", "", "Regular expression pattern allowing to whitelist databases. If set, only databases matching this expression will be processed")
 	flag.BoolVar(&args.MvRl, "mc", false, "Move dump of roles into each database subdirectory")
-	flag.StringVar(&args.Docu, "doc", `/\*DOCU(.*)DOCU\*/`, "Move dump of roles into each database subdirectory.")
 	flag.IntVar(&args.BufS, "buffer", 1024*1024, "Set up maximum buffer sizze if your dump contains data not feeting the scanner")
 	flag.BoolVar(&args.Cln, "clean", false, "If true, it will wipe out the content of the destination directory. Otherwise will attempt to add new files")
 	flag.BoolVar(&args.Quiet, "quiet", false, "If true, no information is outputed to std out")

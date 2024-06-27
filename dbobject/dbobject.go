@@ -19,8 +19,6 @@ var rgx_genFunctionName *regexp.Regexp
 var rgx_fncNormArgNames_b *regexp.Regexp
 var rgx_fncNormArgNames_c *regexp.Regexp
 
-var Rgx_fncDocu *regexp.Regexp
-
 func init() {
 
 	rgx_normalize_index = regexp.MustCompile(` ON ([\w]+)\.([\w]+)`)
@@ -50,7 +48,6 @@ type DbObject struct {
 	ObjSubName string
 	Content    strings.Builder
 	Database   string
-	DocuRgx    string
 	AclFiles   bool
 	Paths      DbObjPath
 }
@@ -63,61 +60,8 @@ func (obj *DbObject) appendContent(line *string) {
 	obj.Content.WriteString(*line)
 }
 
-// Check wether regular expression (given by a user) is compilable
-func IsDocuRegexOk(rgx string) error {
-
-	if rgx == "" {
-		return nil
-	}
-
-	var err error
-
-	if Rgx_fncDocu, err = regexp.Compile(`(?s)` + rgx); err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
-// Extracts documentation (DOCU section) from the contect.
-func (obj *DbObject) extractDocu() error {
-
-	if !((obj.ObjType == "FUNCTION" || obj.ObjType == "PROCEDURE") && obj.DocuRgx != "") {
-		return nil
-	}
-
-	// Defer a function that recovers from MustCompile panic
-	defer func() error {
-		if r := recover(); r != nil {
-			return fmt.Errorf("invalid regular expression for extracting documentation")
-		}
-		return nil
-	}()
-
-	newfile := filepath.Join(
-		filepath.Dir(obj.Paths.FullPath),
-		strings.TrimSuffix(filepath.Base(obj.Paths.FullPath), filepath.Ext(obj.Paths.FullPath))+".md")
-
-	content := "# " + obj.Schema + "." + obj.Name
-
-	matches := Rgx_fncDocu.FindSubmatch([]byte(obj.Content.String()))
-	if len(matches) > 1 {
-		content += "\n" + string(matches[1])
-	}
-
-	content += "\n [Back to function list](../readme.md)\n"
-
-	if err := os.WriteFile(newfile, []byte(content), 0644); err != nil {
-		return fmt.Errorf("error while writing file: %s", newfile)
-	}
-
-	return nil
-}
-
 // Stores objects to the file.
 // It makes some minor formatting (mainly adds/removes EOLs)
-// It also extracts documentation for function code if available
 func (obj *DbObject) StoreObj() error {
 
 	obj.normalizeDbObject()
@@ -151,10 +95,6 @@ func (obj *DbObject) StoreObj() error {
 
 	if err != nil {
 		return fmt.Errorf("Could not write text to:" + obj.Paths.FullPath)
-	}
-
-	if err = obj.extractDocu(); err != nil {
-		return err
 	}
 
 	return nil

@@ -39,11 +39,6 @@ func StartProcessing(args *Config) error {
 	output.Println(fmt.Sprintf("Clean destination location: %t", args.Cln))
 
 	// Check regular expression before any processing
-	if err := IsDocuRegexOk(args.Docu); err != nil {
-		return err
-	}
-
-	// Check regular expression before any processing
 	if err := IsExclObjTypeOk(args.ExOT); err != nil {
 		return err
 	}
@@ -386,7 +381,6 @@ func InitRoleObjFromLine(line *string, args *Config, dbname string) *DbObject {
 		ObjType:  "ROLE",
 		Schema:   "-",
 		Database: dbname,
-		DocuRgx:  args.Docu,
 		AclFiles: args.AclFiles,
 		Paths: DbObjPath{
 			Rootpath:   args.Dest,
@@ -421,7 +415,6 @@ func InitCommonObjFromLine(line *string, args *Config, dbname string) *DbObject 
 		ObjType:  result["Type"],
 		Schema:   result["Schema"],
 		Database: dbname,
-		DocuRgx:  args.Docu,
 		AclFiles: args.AclFiles,
 		Paths: DbObjPath{
 			Rootpath:   args.Dest,

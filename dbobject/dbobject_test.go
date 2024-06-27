@@ -263,23 +263,3 @@ func TestDatabaseAclPath(t *testing.T) {
 		t.Errorf("test TestDatabaseAclPath() failed")
 	}
 }
-
-func TestOfIsDocuTgx(t *testing.T) {
-
-	IsDocuRegexOk(`/*DOCU.*DOCU*/`)
-
-	// Test of valid pattern
-	if IsDocuRegexOk(`/*DOCU.*DOCU*/`) != nil {
-		t.Errorf("test TestofIsDocuTgx() 1 failed")
-	}
-
-	// Test of empty pattern
-	if IsDocuRegexOk("") != nil {
-		t.Errorf("test TestofIsDocuTgx() 2 failed")
-	}
-
-	// Test of wrong pattern
-	if IsDocuRegexOk("[ *") == nil {
-		t.Errorf("test TestofIsDocuTgx() 2 failed")
-	}
-}
