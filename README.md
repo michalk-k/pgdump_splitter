@@ -33,6 +33,8 @@ The custom mode is an attempt to aggregate related objects in single files.
 The program scans dump files line by line executing regular expression matching against them to extract blocks of code. For this reason, using text patterns listed below in a source code of any function may confuse the utility.
 
 `\connect some_string`\
+`\restrict some_string`\
+`\unrestrict some_string`\
 `-- PostgreSQL database dump`\
 `-- PostgreSQL database dump complete`\
 `-- Name: some_string; Type: some_string; Schema: some_string;`\

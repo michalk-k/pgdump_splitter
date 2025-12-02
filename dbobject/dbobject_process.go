@@ -11,6 +11,7 @@ import (
 )
 
 var rgx_conn *regexp.Regexp
+var rgx_restrict *regexp.Regexp
 var rgx_users *regexp.Regexp
 var rgx_dbdump *regexp.Regexp
 var rgx_roles *regexp.Regexp
@@ -22,6 +23,7 @@ var rgx_ExcludeObjType *regexp.Regexp
 
 func init() {
 	rgx_conn = regexp.MustCompile(`^\\connect( -reuse-previous=on)? (("dbname='(.*?)'")|(.*))`)
+	rgx_restrict = regexp.MustCompile(`^\\(un)?restrict `)
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump = regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
 	rgx_roles = regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
@@ -165,6 +167,11 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 	for scanner.Scan() {
 		lineno = lineno + 1
 		line := scanner.Text()
+
+		// Skip restrict/unrestrict commands
+		if rgx_restrict.MatchString(line) {
+			continue
+		}
 
 		// Reacts on row:
 		// \connect database_name
