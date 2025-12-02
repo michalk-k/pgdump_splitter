@@ -1,4 +1,7 @@
 # CHANGELOG
+# 1.2.0
+* skip \restrict and \unrestrict lines introduced by postgresql v17.6
+
 # 1.1.0
 * removed extracting documentation from function source code (`-doc` parameter)
 
