@@ -23,7 +23,6 @@ var rgx_ExcludeObjType *regexp.Regexp
 
 func init() {
 	rgx_conn = regexp.MustCompile(`^\\connect( -reuse-previous=on)? (("dbname='(.*?)'")|(.*))`)
-	rgx_restrict = regexp.MustCompile(`^\\(un)?restrict `)
 	rgx_users = regexp.MustCompile(`^-- (User Configurations|Databases)[\s]*$`)
 	rgx_dbdump = regexp.MustCompile(`^-- PostgreSQL database dump[\s]*(complete)?[\s]*$`)
 	rgx_roles = regexp.MustCompile(`(^-- (?P<Type1>Roles|Role memberships)[\s]*$)|(^-- (?P<Type2>User Config) \".*\"[\s]*$)`)
@@ -161,6 +160,16 @@ func ProcessStream(args *Config, scanner *bufio.Scanner) error {
 		if err != nil {
 			return fmt.Errorf("invalid regular expression for databases whitelisting")
 		}
+	}
+
+	rgx := `^\\(un)?restrict `
+	if args.Restrict != "" {
+		rgx = `^\\(un)?restrict ` + args.Restrict + `[\n\r]*$`
+	}
+
+	rgx_restrict, err = regexp.Compile(rgx)
+	if err != nil {
+		return fmt.Errorf("invalid Restrict argument; breaks regular expression compilation")
 	}
 
 	// Iterate over each line

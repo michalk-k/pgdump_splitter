@@ -40,6 +40,8 @@ The program scans dump files line by line executing regular expression matching 
 `-- Name: some_string; Type: some_string; Schema: some_string;`\
 `-- Data for Name: some_string; Type: some_string; Schema: some_string;`
 
+*) limitation related to restrict/unrestrict may be lifted by using `-restrict` parameter.
+
 *2.*
 The utility is not designed to accommodate databases with object names containing space characters.
 The utility relies on metadata extracted from comments in SQL dumps to identify database objects. Regrettably, the accuracy of these metadata often suffers when object names include spaces, thereby rendering proper data segmentation impossible.
@@ -102,6 +104,12 @@ Command-line options listed below, control the `pgdump_splitter` utility. Becaus
 `-aclfiles`
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Applicable or mode=custom only. Makes GRANTs be output to separate files suffixed with `.acl.sql`, ie `table_name.acl.sql`. Otherwise, acls are appended to related object files.
+
+
+`-restrict=hash`
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;By default the `pgdump_splitter` skips all lines that start with \restrict and \unrestrict. The `restrict` parameter, allows to pass the restrict hash, resulting in skipping only specified lines. The restric has been introduced in pg17.6. See [link](https://www.postgresql.org/docs/current/app-pgdump.html) and [link](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMAND-RESTRICT) for more info.
+
 
 `-version`
 

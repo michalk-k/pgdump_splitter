@@ -1,4 +1,7 @@
 # CHANGELOG
+# 1.2.1
+* Make possible to pass hash for restrict/unrestrict
+
 # 1.2.0
 * skip \restrict and \unrestrict lines introduced by postgresql v17.6
 

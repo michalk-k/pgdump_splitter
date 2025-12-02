@@ -16,4 +16,5 @@ type Config struct {
 	Cln      bool
 	Quiet    bool
 	AclFiles bool
+	Restrict string
 }
