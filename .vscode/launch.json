@@ -10,6 +10,14 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
+            "args": ["-f", "/home/bartakm/Downloads/dump.sql", "-dst", "/home/bartakm/t/struct", "-mc", "-mode", "custom", "-clean", "-aclfiles", "-restrict", "LG5bP5cn5npCNVoIoJuSB1vNTKb2dXgZWiT3mDqaABgc8d0fkcjaslRpd41HcOQ"],
+        },
+        {
+            "name": "No restrict",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "main.go",
             "args": ["-f", "/home/bartakm/Downloads/dump.sql", "-dst", "/home/bartakm/t/struct", "-mc", "-mode", "custom", "-clean", "-aclfiles"],
         }
     ]

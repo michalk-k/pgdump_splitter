@@ -27,6 +27,7 @@ func main() {
 	flag.BoolVar(&args.Quiet, "quiet", false, "If true, no information is outputed to std out")
 	flag.BoolVar(&args.AclFiles, "aclfiles", false, "Applicable or mode=custom only. Makes GRANTs to be outputed to separate files suffixed with .acl.sql, ie table_name.acl.sql. Otherwise acls are appended to related object file.")
 	flag.StringVar(&args.ExOT, "exclude-objects", "", "Regular expression pattern allowing to skip extraction of matching database objects. The expression is matched against TYPE value found in the dumped SQL")
+	flag.StringVar(&args.Restrict, "restrict", "", "Restrict hash that supports restricted mode introduced in postgresql 17.6. Without this option every restrict/unrestrict line will be skipped")
 	flag.Bool("version", false, "Show program version")
 
 	flag.Parse()
